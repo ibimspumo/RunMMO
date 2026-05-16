@@ -10,11 +10,17 @@ export interface LevelAssets {
 
 export type AppMode = "simple" | "mmo";
 
+// Anzeigeart des Overlays (nur im MMO-Modus relevant; Simple nutzt immer "ladder").
+export type OverlayStyle = "ladder" | "tacho";
+
 export interface AppSettings {
   // App-Modus
   // - "simple": Klassische Leiter mit Timer und Geschenk-Icons (Godot-1:1)
   // - "mmo":   Reine Leiter ohne Timer/Icons, Steuerung ausschließlich über Webhooks
   mode: AppMode;
+
+  // Anzeigeart (nur MMO): "ladder" = Balken, "tacho" = Halbkreis-Gauge.
+  overlayStyle: OverlayStyle;
 
   // Geschenke + Sounds pro Level (12 Slots)
   levels: LevelAssets[];
@@ -71,6 +77,15 @@ export interface AppSettings {
   overlayScale: number;       // 0.1 .. 2.0
   overlayOffsetLeft: number;  // px
   overlayOffsetTop: number;   // px
+
+  // Tacho (nur MMO + overlayStyle="tacho")
+  tachoSize: number;             // Durchmesser px (Referenz 450px Fenster)
+  tachoArcDegrees: number;       // 180 = Halbkreis, 270 = klassischer Auto-Tacho
+  tachoThickness: number;        // Dicke des farbigen Bogens in px
+  tachoShowLabels: boolean;      // 1..12 Beschriftungen am Bogen
+  tachoShowCenterValue: boolean; // großes "XX KMH" in der Mitte
+  tachoNeedleColor: RGBA;
+  tachoDialBgColor: RGBA;        // Hintergrund des Gauge-Kreises
 
   // Stream-HP (nur im MMO-Modus aktiv)
   streamHpEnabled: boolean;

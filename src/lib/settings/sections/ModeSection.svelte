@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { AppSettings, AppMode } from "../../types";
+  import type { AppSettings, AppMode, OverlayStyle } from "../../types";
   import { SectionHeader } from "../../ui";
 
   export let cfg: AppSettings;
@@ -15,6 +15,19 @@
       id: "simple",
       title: "Simple",
       desc: "Klassische Leiter wie im Godot-Original: Timer pro Level, läuft er ab → Level runter. Geschenk-Icons werden bei den Nachbar-Levels (UP/DOWN-Ziel) eingeblendet.",
+    },
+  ];
+
+  const styles: { id: OverlayStyle; title: string; desc: string }[] = [
+    {
+      id: "ladder",
+      title: "Leiter",
+      desc: "Klassische vertikale KMH-Balken (1–12 von unten nach oben).",
+    },
+    {
+      id: "tacho",
+      title: "Tacho",
+      desc: "Halbkreis-Gauge mit Nadel wie im Auto. Farbsegmente folgen den Level-Farben.",
     },
   ];
 </script>
@@ -38,6 +51,28 @@
     </label>
   {/each}
 </div>
+
+{#if cfg.mode === "mmo"}
+  <div class="style-block">
+    <div class="style-head">
+      <span class="style-title">Anzeigeart</span>
+      <span class="style-sub">Wie das Overlay im MMO-Modus dargestellt wird.</span>
+    </div>
+    <div class="modes">
+      {#each styles as s}
+        <label class="mode-card style" class:active={cfg.overlayStyle === s.id}>
+          <input type="radio" name="overlayStyle" value={s.id} bind:group={cfg.overlayStyle} />
+          <div class="content">
+            <div class="title-row">
+              <span class="title">{s.title}</span>
+            </div>
+            <p class="desc">{s.desc}</p>
+          </div>
+        </label>
+      {/each}
+    </div>
+  </div>
+{/if}
 
 <style>
   .modes {
@@ -97,5 +132,27 @@
     color: var(--c-text-muted);
     line-height: 1.5;
     margin: 0;
+  }
+  .style-block {
+    margin-top: var(--sp-4);
+    padding-top: var(--sp-4);
+    border-top: 1px solid var(--c-border);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+  .style-head {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .style-title {
+    font-size: var(--fs-md);
+    font-weight: 600;
+    color: var(--c-text);
+  }
+  .style-sub {
+    font-size: var(--fs-xs);
+    color: var(--c-text-muted);
   }
 </style>

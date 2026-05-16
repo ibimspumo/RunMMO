@@ -26,6 +26,7 @@ const c = (r: number, g: number, b: number, a = 1): RGBA => ({ r, g, b, a });
 export function defaultSettings(): AppSettings {
   return {
     mode: "mmo",
+    overlayStyle: "ladder",
     levels: Array.from({ length: 12 }, () => ({
       imagePath: null,
       soundPath: null,
@@ -87,6 +88,14 @@ export function defaultSettings(): AppSettings {
     overlayScale: 0.6,
     overlayOffsetLeft: 30,
     overlayOffsetTop: 60,
+
+    tachoSize: 360,
+    tachoArcDegrees: 220,
+    tachoThickness: 28,
+    tachoShowLabels: true,
+    tachoShowCenterValue: true,
+    tachoNeedleColor: c(1, 1, 1),
+    tachoDialBgColor: c(0.08, 0.08, 0.08, 0.9),
 
     streamHpEnabled: true,
     streamHpMax: 100,

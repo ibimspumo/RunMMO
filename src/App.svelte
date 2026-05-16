@@ -5,6 +5,7 @@
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
   import Ladder from "./lib/overlay/Ladder.svelte";
+  import Tacho from "./lib/overlay/Tacho.svelte";
   import HpBar from "./lib/overlay/HpBar.svelte";
   import Settings from "./lib/settings/Settings.svelte";
 
@@ -361,7 +362,11 @@
 </script>
 
 <main>
-  <Ladder {cfg} {state} />
+  {#if cfg.mode === "mmo" && cfg.overlayStyle === "tacho"}
+    <Tacho {cfg} {state} />
+  {:else}
+    <Ladder {cfg} {state} />
+  {/if}
 
   {#if cfg.mode === "mmo" && cfg.streamHpEnabled}
     <HpBar {cfg} {state} />
