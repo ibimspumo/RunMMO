@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.svelte-kit/
+.DS_Store
+*.log
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/
+src-tauri/WixTools/
+
+# Tool-/IDE-Verzeichnisse
+.claude/
+.vscode/
+.idea/
