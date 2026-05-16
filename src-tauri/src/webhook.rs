@@ -164,7 +164,7 @@ async fn handle_heal(
     State(s): State<AxumState>,
     Query(params): Query<HpParams>,
 ) -> impl IntoResponse {
-    let amount = params.amount.unwrap_or(10.0);
+    let amount = params.amount.unwrap_or(100.0);
     if !amount.is_finite() || amount <= 0.0 {
         return json_err(
             StatusCode::BAD_REQUEST,
@@ -181,7 +181,7 @@ async fn handle_damage(
     State(s): State<AxumState>,
     Query(params): Query<HpParams>,
 ) -> impl IntoResponse {
-    let amount = params.amount.unwrap_or(10.0);
+    let amount = params.amount.unwrap_or(100.0);
     if !amount.is_finite() || amount <= 0.0 {
         return json_err(
             StatusCode::BAD_REQUEST,

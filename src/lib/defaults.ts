@@ -105,10 +105,12 @@ export function defaultSettings(): AppSettings {
     tachoDialBgColor: c(0.08, 0.08, 0.08, 0.9),
 
     streamHpEnabled: true,
-    streamHpMax: 100,
+    streamHpMax: 1000,
     // 12 Werte: Sekunden pro -1 HP je KMH-Level (1..12).
-    // Default: weich abfallende Kurve von 10s/HP @ 1KMH bis 1s/HP @ 12KMH.
-    streamHpSecondsPerHpByLevel: [10, 9, 8, 7, 6, 5, 4, 3, 2.5, 2, 1.5, 1],
+    // Default: weich abfallende Kurve von 1s/HP @ 1KMH bis 0.1s/HP @ 12KMH
+    // (= 1..10 HP/s). Größerer HP-Pool gibt mehr Spielraum für /heal- und
+    // /damage-Werte.
+    streamHpSecondsPerHpByLevel: [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.25, 0.2, 0.15, 0.1],
     streamHpShowDecayRate: true,
     streamHpDeathSoundPath: null,
     streamHpHealSoundPath: null,

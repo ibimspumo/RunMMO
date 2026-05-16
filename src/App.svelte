@@ -191,12 +191,13 @@
 
   function printHelp() {
     console.log(
-      "Steuerung:\n  W/↑: Level hoch\n  S/↓: Level runter\n  R: Reset\n  T: Timer start/stop\n  P: +10 HP (Heal-Test)\n  M: −10 HP (Damage-Test)\n  H: Hilfe\n  E: Edit-Modus\n  ESC: Einstellungen",
+      "Steuerung:\n  W/↑: Level hoch\n  S/↓: Level runter\n  R: Reset\n  T: Timer start/stop\n  P: +100 HP (Heal-Test)\n  M: −100 HP (Damage-Test)\n  H: Hilfe\n  E: Edit-Modus\n  ESC: Einstellungen",
     );
   }
 
-  // Standard-Menge für die Heal/Damage-Test-Tasten (entspricht dem Webhook-Default).
-  const HP_TEST_AMOUNT = 10;
+  // Standard-Menge für die Heal/Damage-Test-Tasten (entspricht dem Webhook-Default
+  // = 10% des Default-Max-HP).
+  const HP_TEST_AMOUNT = 100;
 
   // Timer-Ablauf (nur im Simple-Modus): wenn timeLeft = 0 und running → move_down auslösen
   $: if (cfg.mode === "simple" && state.isRunning && state.timeLeft <= 0) {

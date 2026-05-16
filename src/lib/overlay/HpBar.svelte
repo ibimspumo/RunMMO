@@ -36,10 +36,13 @@
 
   function spawnHealParticles(amount: number) {
     if (!barWidth || !barHeight) return;
-    const count = Math.max(3, Math.min(18, 3 + Math.floor(amount / 3)));
+    // Effekte skalieren mit %-Anteil am Max-HP, nicht mit absoluter Menge —
+    // sonst sieht ein /heal?amount=50 bei Max=100 und Max=1000 völlig unterschiedlich aus.
+    const ratio = Math.min(1, amount / Math.max(1, cfg.streamHpMax));
+    const count = Math.max(3, Math.min(18, 3 + Math.round(ratio * 30)));
     const baseSize = Math.max(14, barHeight * 0.75);
-    const sizeBoost = Math.min(1.8, 1 + amount / 60);
-    const dur = 900 + Math.min(600, amount * 8);
+    const sizeBoost = Math.min(1.8, 1 + ratio * 1.6);
+    const dur = 900 + Math.min(600, ratio * 800);
     const ids: number[] = [];
     const fresh: Particle[] = [];
     for (let i = 0; i < count; i++) {
@@ -60,7 +63,8 @@
   }
 
   function triggerDamageFx(amount: number) {
-    const intensity = Math.min(1, 0.45 + amount / 30);
+    const ratio = Math.min(1, amount / Math.max(1, cfg.streamHpMax));
+    const intensity = Math.min(1, 0.45 + ratio * 3.5);
     if (flashEl?.animate) {
       flashEl.animate(
         [
@@ -72,7 +76,7 @@
       );
     }
     if (innerEl?.animate) {
-      const mag = Math.min(8, 3 + amount / 8) * autoScale;
+      const mag = Math.min(8, 3 + ratio * 12) * autoScale;
       innerEl.animate(
         [
           { transform: "translateX(0)" },

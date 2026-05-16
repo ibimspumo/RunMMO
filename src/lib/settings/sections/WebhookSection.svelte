@@ -20,8 +20,8 @@
     { method: "GET", path: "/reset", desc: "Reset auf Level 1 (HP voll)" },
     { method: "GET", path: "/status", desc: "Aktueller Status als JSON" },
     { method: "GET", path: "/gift?level=X", desc: "X=Level (1–12): gleiches Level → Timer-Reset, ±1 → Wechsel" },
-    { method: "GET", path: "/heal?amount=X", desc: "Stream-HP +X (MMO-Modus). Default X=10." },
-    { method: "GET", path: "/damage?amount=X", desc: "Stream-HP −X (MMO-Modus). Default X=10." },
+    { method: "GET", path: "/heal?amount=X", desc: "Stream-HP +X (MMO-Modus). Default X=100." },
+    { method: "GET", path: "/damage?amount=X", desc: "Stream-HP −X (MMO-Modus). Default X=100." },
   ];
 
   async function copy(text: string) {

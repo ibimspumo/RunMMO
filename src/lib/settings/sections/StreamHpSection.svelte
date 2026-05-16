@@ -105,7 +105,7 @@
 
 <Card
   title="Heal & Damage (Webhooks)"
-  hint="Trigger via GET /heal?amount=X bzw. /damage?amount=X. Ohne amount = 10. Sounds optional — nur abgespielt, wenn eine Datei gewählt ist."
+  hint="Trigger via GET /heal?amount=X bzw. /damage?amount=X. Ohne amount = 100. Sounds optional — nur abgespielt, wenn eine Datei gewählt ist."
 >
   <Field label="Heal-Sound (+HP)">
     <FilePicker
@@ -127,7 +127,7 @@
 
   <Callout variant="info">
     Tasten zum Testen im Overlay (nicht im Settings-Panel):
-    <code>P</code> = +10 HP, <code>M</code> = −10 HP.
+    <code>P</code> = +100 HP, <code>M</code> = −100 HP.
   </Callout>
 </Card>
 
