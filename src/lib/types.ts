@@ -71,12 +71,31 @@ export interface AppSettings {
   overlayScale: number;       // 0.1 .. 2.0
   overlayOffsetLeft: number;  // px
   overlayOffsetTop: number;   // px
+
+  // Stream-HP (nur im MMO-Modus aktiv)
+  streamHpEnabled: boolean;
+  streamHpMax: number;                  // Start-HP, z.B. 100
+  streamHpSecondsPerHpByLevel: number[];// 12 Werte: Sekunden pro -1 HP je KMH-Level
+  streamHpShowDecayRate: boolean;       // aktuelle Drain-Rate unter dem Balken anzeigen
+  streamHpDeathSoundPath: string | null;// optional: eigener Death-Sound
+  streamHpHealSoundPath: string | null; // Sound bei /heal
+  streamHpDamageSoundPath: string | null;// Sound bei /damage
+  streamHpFillColor: RGBA;
+  streamHpBgColor: RGBA;
+  streamHpBorderColor: RGBA;
+  streamHpTextColor: RGBA;
+  streamHpShowNumbers: boolean;
+  streamHpWidth: number;                // px (Referenz 450px Fenster)
+  streamHpHeight: number;               // px
+  streamHpBorderRadius: number;         // px (0 = eckig, hoch = Pille)
+  streamHpVerticalPosition: number;     // 0..1 (0 = oben, 1 = unten)
 }
 
 export interface LadderState {
   currentLevel: number; // 0..11
   timeLeft: number;     // Sekunden
   isRunning: boolean;
+  hp: number;           // Stream-HP (0..streamHpMax)
 }
 
 export type WebhookEvent =
@@ -84,4 +103,6 @@ export type WebhookEvent =
   | { kind: "down" }
   | { kind: "gift"; level: number }
   | { kind: "reset" }
+  | { kind: "heal"; amount: number }
+  | { kind: "damage"; amount: number }
   | { kind: "status" };

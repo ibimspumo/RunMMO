@@ -11,14 +11,12 @@
 />
 
 <Card title="Level-Balken (12 Levels)">
-  <div class="grid">
-    {#each cfg.levelColors as _, i}
-      <div class="row">
-        <span class="label">{i + 1} KMH</span>
-        <ColorField bind:value={cfg.levelColors[i]} />
-      </div>
-    {/each}
-  </div>
+  {#each cfg.levelColors as _, i}
+    <div class="row">
+      <span class="label">{i + 1} KMH</span>
+      <ColorField bind:value={cfg.levelColors[i]} />
+    </div>
+  {/each}
 </Card>
 
 <Card title="Weitere Farben">
@@ -41,11 +39,6 @@
 </Card>
 
 <style>
-  .grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--sp-2) var(--sp-4);
-  }
   .row {
     display: flex;
     align-items: center;
@@ -55,7 +48,7 @@
   .label {
     font-size: var(--fs-sm);
     color: var(--c-text);
-    width: 110px;
+    width: 96px;
     flex-shrink: 0;
   }
 </style>

@@ -5,6 +5,7 @@
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
   import Ladder from "./lib/overlay/Ladder.svelte";
+  import HpBar from "./lib/overlay/HpBar.svelte";
   import Settings from "./lib/settings/Settings.svelte";
 
   import type { AppSettings, LadderState } from "./lib/types";
@@ -17,11 +18,15 @@
     saveSettings,
     bindBackendEvents,
     soundUrlForLevel,
+    streamHpDeathSoundUrl,
+    streamHpHealSoundUrl,
+    streamHpDamageSoundUrl,
   } from "./lib/stores";
 
   let cfg: AppSettings = defaultSettings();
-  let state: LadderState = { currentLevel: 0, timeLeft: 0, isRunning: false };
+  let state: LadderState = { currentLevel: 0, timeLeft: 0, isRunning: false, hp: 100 };
   let panelOpen = false;
+  let deathSoundFired = false;
 
   // Reaktive Bindings auf Stores
   const unsubSettings = settings.subscribe((v) => (cfg = v));
@@ -45,9 +50,67 @@
           timeLeft: Math.max(0, s.timeLeft - dt),
         }));
       }
+      if (cfg.mode === "mmo" && cfg.streamHpEnabled && state.hp > 0) {
+        const rate = hpDrainRatePerSec(cfg, state.currentLevel + 1);
+        if (rate > 0) {
+          ladderState.update((s) => ({
+            ...s,
+            hp: Math.max(0, s.hp - rate * dt),
+          }));
+        }
+      }
       tickHandle = requestAnimationFrame(tick);
     };
     tickHandle = requestAnimationFrame(tick);
+  }
+
+  // HP-Drain: Sekunden pro -1 HP für das aktuelle 1-basierte Level (1..12) aus Array lesen.
+  function hpSecondsPerHp(cfg: AppSettings, level1Based: number): number {
+    const idx = Math.max(0, Math.min(11, level1Based - 1));
+    const v = cfg.streamHpSecondsPerHpByLevel?.[idx];
+    return typeof v === "number" && v > 0 ? v : 1;
+  }
+  function hpDrainRatePerSec(cfg: AppSettings, level1Based: number): number {
+    return 1 / Math.max(0.01, hpSecondsPerHp(cfg, level1Based));
+  }
+
+  function playDeathSound() {
+    playUrl(streamHpDeathSoundUrl(cfg), "death");
+  }
+  function playUrl(url: string | null, label: string) {
+    if (!url) return;
+    const a = new Audio(url);
+    a.volume = Math.max(0, Math.min(1, Math.pow(10, cfg.volumeDb / 20)));
+    a.play().catch((err) => console.warn(`${label} sound failed`, err));
+  }
+
+  function applyHeal(amount: number) {
+    if (cfg.mode !== "mmo" || !cfg.streamHpEnabled) return;
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    ladderState.update((s) => ({
+      ...s,
+      hp: Math.min(cfg.streamHpMax, s.hp + amount),
+    }));
+    playUrl(streamHpHealSoundUrl(cfg), "heal");
+  }
+
+  function applyDamage(amount: number) {
+    if (cfg.mode !== "mmo" || !cfg.streamHpEnabled) return;
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    ladderState.update((s) => ({
+      ...s,
+      hp: Math.max(0, s.hp - amount),
+    }));
+    playUrl(streamHpDamageSoundUrl(cfg), "damage");
+  }
+
+  // HP=0 → Death-Sound einmal abspielen. Re-Trigger nach Heilung > 0.
+  $: if (cfg.mode === "mmo" && cfg.streamHpEnabled && state.hp <= 0 && !deathSoundFired) {
+    deathSoundFired = true;
+    playDeathSound();
+  }
+  $: if (state.hp > 0 && deathSoundFired) {
+    deathSoundFired = false;
   }
 
   function stopTickLoop() {
@@ -113,6 +176,7 @@
       currentLevel: 0,
       isRunning: false,
       timeLeft: useTimer ? cfg.levelDurationSeconds : 0,
+      hp: cfg.streamHpMax,
     }));
   }
 
@@ -187,6 +251,8 @@
           },
         });
       },
+      (amount) => applyHeal(amount),
+      (amount) => applyDamage(amount),
     );
   }
 
@@ -235,6 +301,7 @@
       currentLevel: 0,
       timeLeft: startWithTimer ? cfg.levelDurationSeconds : 0,
       isRunning: startWithTimer,
+      hp: cfg.streamHpMax,
     });
     startTickLoop();
     await setupBackend();
@@ -289,12 +356,16 @@
     const next = ev.detail;
     settings.set(next);
     await saveSettings(next);
-    settingsOpen.set(false);
+    // Panel offen lassen — User schließt explizit mit ESC oder X
   }
 </script>
 
 <main>
   <Ladder {cfg} {state} />
+
+  {#if cfg.mode === "mmo" && cfg.streamHpEnabled}
+    <HpBar {cfg} {state} />
+  {/if}
 
   {#if panelOpen}
     <Settings {cfg} on:save={onSave} on:close={() => settingsOpen.set(false)} />

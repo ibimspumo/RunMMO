@@ -1,6 +1,6 @@
 [package]
 name = "runmmo"
-version = "0.0.2"
+version = "0.0.3"
 description = "RunMMO TikTok Streamer Overlay"
 authors = ["RunMMO"]
 edition = "2021"

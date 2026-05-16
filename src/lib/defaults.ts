@@ -87,6 +87,25 @@ export function defaultSettings(): AppSettings {
     overlayScale: 0.6,
     overlayOffsetLeft: 30,
     overlayOffsetTop: 60,
+
+    streamHpEnabled: true,
+    streamHpMax: 100,
+    // 12 Werte: Sekunden pro -1 HP je KMH-Level (1..12).
+    // Default: weich abfallende Kurve von 10s/HP @ 1KMH bis 1s/HP @ 12KMH.
+    streamHpSecondsPerHpByLevel: [10, 9, 8, 7, 6, 5, 4, 3, 2.5, 2, 1.5, 1],
+    streamHpShowDecayRate: true,
+    streamHpDeathSoundPath: null,
+    streamHpHealSoundPath: null,
+    streamHpDamageSoundPath: null,
+    streamHpFillColor: c(0.15, 0.85, 0.25),
+    streamHpBgColor: c(0.08, 0.08, 0.08, 0.85),
+    streamHpBorderColor: c(0, 0, 0, 1),
+    streamHpTextColor: c(1, 1, 1),
+    streamHpShowNumbers: true,
+    streamHpWidth: 340,
+    streamHpHeight: 48,
+    streamHpBorderRadius: 24,
+    streamHpVerticalPosition: 0.72,
   };
 }
 

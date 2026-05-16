@@ -58,6 +58,11 @@ struct GiftParams {
     level: Option<i32>,
 }
 
+#[derive(Deserialize)]
+struct HpParams {
+    amount: Option<f32>,
+}
+
 fn cors_headers() -> CorsLayer {
     CorsLayer::permissive()
 }
@@ -68,6 +73,8 @@ fn build_router(state: AxumState) -> Router {
         .route("/down", get(handle_down))
         .route("/reset", get(handle_reset))
         .route("/gift", get(handle_gift))
+        .route("/heal", get(handle_heal))
+        .route("/damage", get(handle_damage))
         .route("/status", get(handle_status))
         .route("/", get(handle_root))
         .with_state(state)
@@ -153,6 +160,40 @@ async fn handle_gift(
     json_ok(&format!("Gift für Level {} verarbeitet", level))
 }
 
+async fn handle_heal(
+    State(s): State<AxumState>,
+    Query(params): Query<HpParams>,
+) -> impl IntoResponse {
+    let amount = params.amount.unwrap_or(10.0);
+    if !amount.is_finite() || amount <= 0.0 {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "Parameter 'amount' muss > 0 sein. Verwendung: /heal?amount=X",
+        );
+    }
+    let _ = s
+        .app
+        .emit("webhook", json!({ "kind": "heal", "amount": amount }));
+    json_ok(&format!("Heal +{} HP", amount))
+}
+
+async fn handle_damage(
+    State(s): State<AxumState>,
+    Query(params): Query<HpParams>,
+) -> impl IntoResponse {
+    let amount = params.amount.unwrap_or(10.0);
+    if !amount.is_finite() || amount <= 0.0 {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "Parameter 'amount' muss > 0 sein. Verwendung: /damage?amount=X",
+        );
+    }
+    let _ = s
+        .app
+        .emit("webhook", json!({ "kind": "damage", "amount": amount }));
+    json_ok(&format!("Damage -{} HP", amount))
+}
+
 async fn handle_status(State(s): State<AxumState>) -> impl IntoResponse {
     // Frontend nach aktuellem Status fragen; mit Timeout auf Antwort warten
     let reply_id = Uuid::new_v4().to_string();
@@ -186,7 +227,10 @@ async fn handle_status(State(s): State<AxumState>) -> impl IntoResponse {
 async fn handle_root() -> impl IntoResponse {
     Json(json!({
         "app": "RunMMO",
-        "endpoints": ["/up", "/down", "/reset", "/gift?level=X", "/status"]
+        "endpoints": [
+            "/up", "/down", "/reset", "/gift?level=X",
+            "/heal?amount=X", "/damage?amount=X", "/status"
+        ]
     }))
 }
 

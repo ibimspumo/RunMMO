@@ -17,9 +17,11 @@
   const endpoints: { method: string; path: string; desc: string }[] = [
     { method: "GET", path: "/up", desc: "Level erhöhen" },
     { method: "GET", path: "/down", desc: "Level reduzieren" },
-    { method: "GET", path: "/reset", desc: "Reset auf Level 1" },
+    { method: "GET", path: "/reset", desc: "Reset auf Level 1 (HP voll)" },
     { method: "GET", path: "/status", desc: "Aktueller Status als JSON" },
     { method: "GET", path: "/gift?level=X", desc: "X=Level (1–12): gleiches Level → Timer-Reset, ±1 → Wechsel" },
+    { method: "GET", path: "/heal?amount=X", desc: "Stream-HP +X (MMO-Modus). Default X=10." },
+    { method: "GET", path: "/damage?amount=X", desc: "Stream-HP −X (MMO-Modus). Default X=10." },
   ];
 
   async function copy(text: string) {

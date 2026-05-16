@@ -5,6 +5,7 @@
   import LevelsSection from "./sections/LevelsSection.svelte";
   import AudioSection from "./sections/AudioSection.svelte";
   import TimerSection from "./sections/TimerSection.svelte";
+  import StreamHpSection from "./sections/StreamHpSection.svelte";
   import WebhookSection from "./sections/WebhookSection.svelte";
   import ColorsSection from "./sections/ColorsSection.svelte";
   import TextSection from "./sections/TextSection.svelte";
@@ -24,6 +25,7 @@
     | "levels"
     | "audio"
     | "timer"
+    | "streamhp"
     | "webhook"
     | "colors"
     | "text"
@@ -47,6 +49,7 @@
         { id: "levels", label: "Level-Assets", icon: "▤" },
         { id: "audio", label: "Audio", icon: "♪" },
         { id: "timer", label: "Timer", icon: "◷" },
+        { id: "streamhp", label: "Stream-HP", icon: "♥" },
       ],
     },
     {
@@ -114,6 +117,8 @@
       <AudioSection bind:cfg={draft} />
     {:else if activeTab === "timer"}
       <TimerSection bind:cfg={draft} />
+    {:else if activeTab === "streamhp"}
+      <StreamHpSection bind:cfg={draft} />
     {:else if activeTab === "webhook"}
       <WebhookSection bind:cfg={draft} />
     {:else if activeTab === "colors"}
@@ -270,11 +275,16 @@
   /* === Content === */
   .content {
     flex: 1;
+    min-height: 0; /* erlaubt dem flex-child unter Content-Höhe zu schrumpfen → scrollbar greift */
     overflow-y: auto;
     padding: var(--sp-4) var(--sp-4) var(--sp-5);
     display: flex;
     flex-direction: column;
     gap: var(--sp-4);
+  }
+  /* Card-Kinder dürfen NIE komprimiert werden — sonst clippt overflow:hidden in der Card den Inhalt. */
+  .content > :global(*) {
+    flex-shrink: 0;
   }
   .content::-webkit-scrollbar { width: 8px; }
   .content::-webkit-scrollbar-track { background: transparent; }

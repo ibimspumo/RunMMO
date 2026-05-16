@@ -21,7 +21,14 @@ export const ladderState: Writable<LadderState> = writable({
   currentLevel: 0,
   timeLeft: 0,
   isRunning: false,
+  hp: 100,
 });
+
+// Death-Sound URL: Custom Pfad oder Fallback auf bundled down.mp3
+export function streamHpDeathSoundUrl(cfg: AppSettings): string {
+  if (cfg.streamHpDeathSoundPath) return convertFileSrc(cfg.streamHpDeathSoundPath);
+  return DEFAULT_DOWN_SOUND_URL;
+}
 
 export const settingsOpen: Writable<boolean> = writable(false);
 
@@ -60,7 +67,31 @@ export async function loadSettings(): Promise<void> {
   const raw = await store.get<AppSettings>(SETTINGS_KEY);
   if (raw) {
     // Mit Defaults mergen, falls neue Felder hinzukommen
-    settings.set({ ...defaultSettings(), ...raw });
+    const merged = { ...defaultSettings(), ...raw };
+    // Migration alter Decay-Felder → Array (linear zwischen Min/Max interpoliert).
+    const legacy = raw as unknown as {
+      streamHpSecondsPerHpAtLevel1?: number;
+      streamHpSecondsPerHpAtLevel12?: number;
+      streamHpSecondsPerHpByLevel?: number[];
+    };
+    if (
+      !Array.isArray(legacy.streamHpSecondsPerHpByLevel) &&
+      typeof legacy.streamHpSecondsPerHpAtLevel1 === "number" &&
+      typeof legacy.streamHpSecondsPerHpAtLevel12 === "number"
+    ) {
+      const s1 = legacy.streamHpSecondsPerHpAtLevel1;
+      const s12 = legacy.streamHpSecondsPerHpAtLevel12;
+      merged.streamHpSecondsPerHpByLevel = Array.from({ length: 12 }, (_, i) => {
+        const t = i / 11;
+        return Number((s1 + (s12 - s1) * t).toFixed(2));
+      });
+    }
+    // Array auf 12 Elemente padden/trimmen.
+    const fallback = defaultSettings().streamHpSecondsPerHpByLevel;
+    const arr = merged.streamHpSecondsPerHpByLevel.slice(0, 12);
+    while (arr.length < 12) arr.push(fallback[arr.length]);
+    merged.streamHpSecondsPerHpByLevel = arr;
+    settings.set(merged);
   }
 }
 
@@ -83,28 +114,51 @@ export async function bindBackendEvents(
   onGift: (level: number) => void,
   onReset: () => void,
   onStatusRequest: (replyId: string) => void,
+  onHeal: (amount: number) => void,
+  onDamage: (amount: number) => void,
 ): Promise<void> {
-  await listen<{ kind: string; level?: number; replyId?: string }>(
-    "webhook",
-    (event) => {
-      const p = event.payload;
-      switch (p.kind) {
-        case "up":
-          onUp();
-          break;
-        case "down":
-          onDown();
-          break;
-        case "gift":
-          if (typeof p.level === "number") onGift(p.level);
-          break;
-        case "reset":
-          onReset();
-          break;
-        case "status":
-          if (p.replyId) onStatusRequest(p.replyId);
-          break;
-      }
-    },
-  );
+  await listen<{
+    kind: string;
+    level?: number;
+    amount?: number;
+    replyId?: string;
+  }>("webhook", (event) => {
+    const p = event.payload;
+    switch (p.kind) {
+      case "up":
+        onUp();
+        break;
+      case "down":
+        onDown();
+        break;
+      case "gift":
+        if (typeof p.level === "number") onGift(p.level);
+        break;
+      case "reset":
+        onReset();
+        break;
+      case "heal":
+        if (typeof p.amount === "number") onHeal(p.amount);
+        break;
+      case "damage":
+        if (typeof p.amount === "number") onDamage(p.amount);
+        break;
+      case "status":
+        if (p.replyId) onStatusRequest(p.replyId);
+        break;
+    }
+  });
+}
+
+// Sound-URLs für Heal/Damage (kein Fallback — wenn nicht gesetzt, kein Sound)
+export function streamHpHealSoundUrl(cfg: AppSettings): string | null {
+  return cfg.streamHpHealSoundPath
+    ? convertFileSrc(cfg.streamHpHealSoundPath)
+    : null;
+}
+
+export function streamHpDamageSoundUrl(cfg: AppSettings): string | null {
+  return cfg.streamHpDamageSoundPath
+    ? convertFileSrc(cfg.streamHpDamageSoundPath)
+    : null;
 }
