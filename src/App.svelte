@@ -8,6 +8,7 @@
   import Tacho from "./lib/overlay/Tacho.svelte";
   import HpBar from "./lib/overlay/HpBar.svelte";
   import Settings from "./lib/settings/Settings.svelte";
+  import Editor, { type EditTarget } from "./lib/editor/Editor.svelte";
 
   import type { AppSettings, LadderState } from "./lib/types";
   import { defaultSettings } from "./lib/defaults";
@@ -27,7 +28,13 @@
   let cfg: AppSettings = defaultSettings();
   let state: LadderState = { currentLevel: 0, timeLeft: 0, isRunning: false, hp: 100 };
   let panelOpen = false;
+  let editMode = false;
   let deathSoundFired = false;
+
+  // Refs auf die Overlay-Komponenten (für Editor-Bbox-Messung).
+  let ladderRef: Ladder | undefined;
+  let tachoRef: Tacho | undefined;
+  let hpRef: HpBar | undefined;
 
   // Reaktive Bindings auf Stores
   const unsubSettings = settings.subscribe((v) => (cfg = v));
@@ -321,14 +328,25 @@
   });
 
   function onKeyDown(e: KeyboardEvent) {
-    // ESC immer behandeln (auch im Settings-Panel zum Schließen)
+    // ESC: schließt vorrangig den Edit-Modus, sonst togglet Settings.
     if (e.key === "Escape") {
-      settingsOpen.update((v) => !v);
+      if (editMode) {
+        exitEditMode();
+      } else {
+        settingsOpen.update((v) => !v);
+      }
       e.preventDefault();
       return;
     }
-    // Andere Shortcuts nur wenn Settings nicht offen
-    if (panelOpen) return;
+    // "E" togglet Edit-Modus (nur wenn Settings zu).
+    if (!panelOpen && (e.key === "e" || e.key === "E")) {
+      if (editMode) exitEditMode();
+      else enterEditMode();
+      e.preventDefault();
+      return;
+    }
+    // Andere Shortcuts nur wenn Settings & Editor nicht offen.
+    if (panelOpen || editMode) return;
     switch (e.key.toLowerCase()) {
       case "w":
       case "arrowup":
@@ -353,6 +371,60 @@
     }
   }
 
+  // === Edit-Modus ===
+  function enterEditMode() {
+    editMode = true;
+  }
+  async function exitEditMode() {
+    editMode = false;
+    // Layout-Änderungen sind direkt in cfg geschrieben — beim Verlassen persistieren.
+    await saveSettings(cfg).catch((e) => console.warn("save failed", e));
+  }
+
+  $: editTargets = buildEditTargets(cfg);
+
+  function buildEditTargets(c: AppSettings): EditTarget[] {
+    const ts: EditTarget[] = [];
+    const showTacho = c.mode === "mmo" && c.overlayStyle === "tacho";
+    const mainLabel = showTacho ? "Tacho" : "Leiter";
+    if (showTacho) {
+      ts.push({
+        id: "tacho",
+        label: mainLabel,
+        kind: "uniform",
+        getElement: () => tachoRef?.getElement(),
+        getLayout: () => ({ x: cfg.tachoX, y: cfg.tachoY }),
+        move: (x, y) => settings.update((s) => ({ ...s, tachoX: x, tachoY: y })),
+        getScale: () => cfg.tachoScale,
+        setScale: (sc) => settings.update((s) => ({ ...s, tachoScale: sc })),
+      });
+    } else {
+      ts.push({
+        id: "ladder",
+        label: mainLabel,
+        kind: "uniform",
+        getElement: () => ladderRef?.getElement(),
+        getLayout: () => ({ x: cfg.ladderX, y: cfg.ladderY }),
+        move: (x, y) => settings.update((s) => ({ ...s, ladderX: x, ladderY: y })),
+        getScale: () => cfg.ladderScale,
+        setScale: (sc) => settings.update((s) => ({ ...s, ladderScale: sc })),
+      });
+    }
+    if (c.mode === "mmo" && c.streamHpEnabled) {
+      ts.push({
+        id: "hp",
+        label: "HP-Leiste",
+        kind: "wh",
+        getElement: () => hpRef?.getElement(),
+        getLayout: () => ({ x: cfg.hpX, y: cfg.hpY }),
+        move: (x, y) => settings.update((s) => ({ ...s, hpX: x, hpY: y })),
+        getSize: () => ({ w: cfg.hpWidth, h: cfg.hpHeight }),
+        setSize: (w, h) => settings.update((s) => ({ ...s, hpWidth: w, hpHeight: h })),
+      });
+    }
+    return ts;
+  }
+
   async function onSave(ev: CustomEvent<AppSettings>) {
     const next = ev.detail;
     settings.set(next);
@@ -363,13 +435,17 @@
 
 <main>
   {#if cfg.mode === "mmo" && cfg.overlayStyle === "tacho"}
-    <Tacho {cfg} {state} />
+    <Tacho bind:this={tachoRef} {cfg} {state} {editMode} />
   {:else}
-    <Ladder {cfg} {state} />
+    <Ladder bind:this={ladderRef} {cfg} {state} {editMode} />
   {/if}
 
   {#if cfg.mode === "mmo" && cfg.streamHpEnabled}
-    <HpBar {cfg} {state} />
+    <HpBar bind:this={hpRef} {cfg} {state} />
+  {/if}
+
+  {#if editMode}
+    <Editor targets={editTargets} on:done={exitEditMode} />
   {/if}
 
   {#if panelOpen}

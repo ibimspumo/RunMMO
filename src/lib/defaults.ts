@@ -85,11 +85,18 @@ export function defaultSettings(): AppSettings {
     spacingBetweenLevels: 8,
     activeBarOutlineWidth: 3,
 
-    overlayScale: 0.6,
-    overlayOffsetLeft: 30,
-    overlayOffsetTop: 60,
+    // Editor-Layout (Werte in Referenz-450px-Raum).
+    ladderX: 30,
+    ladderY: 60,
+    ladderScale: 0.6,
+    tachoX: 30,
+    tachoY: 60,
+    tachoScale: 0.6,
+    hpX: 55,
+    hpY: 552,
+    hpWidth: 340,
+    hpHeight: 48,
 
-    tachoSize: 360,
     tachoArcDegrees: 220,
     tachoThickness: 28,
     tachoShowLabels: true,
@@ -111,10 +118,7 @@ export function defaultSettings(): AppSettings {
     streamHpBorderColor: c(0, 0, 0, 1),
     streamHpTextColor: c(1, 1, 1),
     streamHpShowNumbers: true,
-    streamHpWidth: 340,
-    streamHpHeight: 48,
     streamHpBorderRadius: 24,
-    streamHpVerticalPosition: 0.72,
   };
 }
 

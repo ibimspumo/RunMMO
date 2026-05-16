@@ -10,7 +10,6 @@
     FilePicker,
     NumberInput,
     SectionHeader,
-    Slider,
     Toggle,
   } from "../../ui";
   import { previewAudio } from "../../ui/audio-preview";
@@ -127,28 +126,7 @@
   </Field>
 </Card>
 
-<Card title="Layout">
-  <Field
-    label="Vertikale Position"
-    hint="0.0 = ganz oben, 1.0 = ganz unten. Default 0.72 (untere Hälfte)."
-  >
-    <Slider
-      bind:value={cfg.streamHpVerticalPosition}
-      min={0}
-      max={1}
-      step={0.01}
-      format={(v) => v.toFixed(2)}
-    />
-  </Field>
-
-  <Field label="Breite (px)" hint="Referenz: 450px Fensterbreite. Skaliert proportional mit.">
-    <NumberInput bind:value={cfg.streamHpWidth} min={40} max={2000} suffix="px" />
-  </Field>
-
-  <Field label="Höhe (px)">
-    <NumberInput bind:value={cfg.streamHpHeight} min={6} max={120} suffix="px" />
-  </Field>
-
+<Card title="Aussehen">
   <Field
     label="Eckenradius (px)"
     hint="0 = eckig, hoch = Pille. Wird automatisch auf die halbe Höhe begrenzt."
@@ -164,6 +142,11 @@
   <Field>
     <Toggle bind:checked={cfg.streamHpShowNumbers} label="HP-Zahlen anzeigen" />
   </Field>
+
+  <Callout variant="info">
+    Position und Größe der HP-Leiste werden im <strong>Edit-Modus</strong>
+    (Taste <code>E</code>) direkt im Overlay eingestellt.
+  </Callout>
 </Card>
 
 <Card title="Farben">

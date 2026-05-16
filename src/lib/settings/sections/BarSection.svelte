@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { AppSettings } from "../../types";
-  import { Card, Field, NumberInput, SectionHeader } from "../../ui";
+  import { Callout, Card, Field, NumberInput, SectionHeader } from "../../ui";
 
   export let cfg: AppSettings;
 
@@ -16,12 +16,6 @@
     step?: number;
     suffix?: string;
   };
-
-  const overlayFields: FieldDef[] = [
-    { key: "overlayScale", label: "Skalierung", min: 0.1, max: 2.0, step: 0.05, suffix: "x" },
-    { key: "overlayOffsetLeft", label: "Offset links", min: 0, max: 4000, suffix: "px" },
-    { key: "overlayOffsetTop", label: "Offset oben", min: 0, max: 4000, suffix: "px" },
-  ];
 
   const sizeFields: FieldDef[] = [
     { key: "barBaseWidth", label: "Basis-Breite", min: 10, max: 1000, suffix: "px" },
@@ -42,28 +36,14 @@
 </script>
 
 <SectionHeader
-  title="Layout"
-  description="Position und Größen. Werte beziehen sich auf 450px Fensterbreite — bei größerem Fenster skaliert alles proportional mit."
+  title="Balken"
+  description="Geometrie der einzelnen Level-Balken. Werte beziehen sich auf 450px Fensterbreite — bei größerem Fenster skaliert alles proportional mit."
 />
 
-<Card
-  title="Overlay-Position"
-  hint="Skaliert die komplette Leiter und positioniert sie vom oberen-linken Fensterrand."
->
-  <div class="grid">
-    {#each overlayFields as f}
-      <Field label={f.label}>
-        <NumberInput
-          bind:value={cfg[f.key]}
-          min={f.min}
-          max={f.max}
-          step={f.step ?? 1}
-          suffix={f.suffix}
-        />
-      </Field>
-    {/each}
-  </div>
-</Card>
+<Callout variant="info">
+  Position und Gesamt-Skalierung der Overlays werden über den <strong>Edit-Modus</strong>
+  (Taste <code>E</code>) eingestellt — direkt im Overlay per Drag & Drop.
+</Callout>
 
 <Card title="Balken-Größen">
   <div class="grid">
@@ -102,5 +82,12 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: var(--sp-3) var(--sp-4);
+  }
+  code {
+    background: var(--c-bg-2);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 0.9em;
   }
 </style>

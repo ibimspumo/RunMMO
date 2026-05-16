@@ -73,13 +73,23 @@ export interface AppSettings {
   spacingBetweenLevels: number;
   activeBarOutlineWidth: number;
 
-  // Overlay-Positionierung (relativ zum Fenster — wichtig für Fullscreen-Overlay)
-  overlayScale: number;       // 0.1 .. 2.0
-  overlayOffsetLeft: number;  // px
-  overlayOffsetTop: number;   // px
+  // Editor-Layout: Position + Skalierung pro Overlay-Element.
+  // Werte in Referenz-450px-Raum (autoScale multipliziert beim Render).
+  // Verwaltet durch den Edit-Modus (Taste "E"), nicht durch Settings-Tab.
+  ladderX: number;
+  ladderY: number;
+  ladderScale: number;
+
+  tachoX: number;
+  tachoY: number;
+  tachoScale: number;
+
+  hpX: number;
+  hpY: number;
+  hpWidth: number;
+  hpHeight: number;
 
   // Tacho (nur MMO + overlayStyle="tacho")
-  tachoSize: number;             // Durchmesser px (Referenz 450px Fenster)
   tachoArcDegrees: number;       // 180 = Halbkreis, 270 = klassischer Auto-Tacho
   tachoThickness: number;        // Dicke des farbigen Bogens in px
   tachoShowLabels: boolean;      // 1..12 Beschriftungen am Bogen
@@ -100,10 +110,7 @@ export interface AppSettings {
   streamHpBorderColor: RGBA;
   streamHpTextColor: RGBA;
   streamHpShowNumbers: boolean;
-  streamHpWidth: number;                // px (Referenz 450px Fenster)
-  streamHpHeight: number;               // px
   streamHpBorderRadius: number;         // px (0 = eckig, hoch = Pille)
-  streamHpVerticalPosition: number;     // 0..1 (0 = oben, 1 = unten)
 }
 
 export interface LadderState {

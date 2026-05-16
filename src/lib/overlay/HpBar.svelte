@@ -6,14 +6,18 @@
   export let cfg: AppSettings;
   export let state: LadderState;
 
+  // DOM-Ref für Editor-Bbox.
+  let innerEl: HTMLDivElement;
+  export function getElement(): HTMLDivElement | undefined {
+    return innerEl;
+  }
+
   // Auto-Skalierung analog zur Ladder (Referenz 450px breit = 1.0)
   const REFERENCE_WIDTH = 450;
   let windowWidth = REFERENCE_WIDTH;
-  let windowHeight = 800;
 
   function updateSize() {
     windowWidth = window.innerWidth || REFERENCE_WIDTH;
-    windowHeight = window.innerHeight || 800;
   }
 
   onMount(() => {
@@ -25,9 +29,10 @@
   });
 
   $: autoScale = windowWidth / REFERENCE_WIDTH;
-  $: barWidth = cfg.streamHpWidth * autoScale;
-  $: barHeight = cfg.streamHpHeight * autoScale;
-  $: topPx = Math.round(windowHeight * cfg.streamHpVerticalPosition - barHeight / 2);
+  $: barWidth = cfg.hpWidth * autoScale;
+  $: barHeight = cfg.hpHeight * autoScale;
+  $: leftPx = Math.round(cfg.hpX * autoScale);
+  $: topPx = Math.round(cfg.hpY * autoScale);
   // Radius mit autoScale skalieren, aber auf halbe Höhe begrenzen (sonst Render-Artefakte).
   $: radiusPx = Math.max(0, Math.min(barHeight / 2, cfg.streamHpBorderRadius * autoScale));
   // Innenradius leicht kleiner, damit Fill nicht über den Rand des Tracks ragt.
@@ -74,7 +79,9 @@
 
 <div
   class="hp-wrap"
+  bind:this={innerEl}
   style="
+    left: {leftPx}px;
     top: {topPx}px;
     width: {barWidth}px;
   "
@@ -125,8 +132,6 @@
 <style>
   .hp-wrap {
     position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
     pointer-events: none;
     z-index: 5;
   }

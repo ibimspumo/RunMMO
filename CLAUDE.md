@@ -38,8 +38,9 @@ src/                       Svelte-Frontend
     defaults.ts            defaultSettings(), Color-Konvertierung
     stores.ts              Svelte stores + load/save + Event-Binding
     version.ts             APP_VERSION (manuell bei Release hochsetzen!)
-    overlay/               Ladder.svelte, LevelBar.svelte
-    settings/              Settings.svelte + sections/*.svelte (9 Tabs)
+    overlay/               Ladder.svelte, LevelBar.svelte, Tacho.svelte, HpBar.svelte
+    editor/                Editor.svelte — Edit-Modus (Taste "E"), Drag/Resize/Center
+    settings/              Settings.svelte + sections/*.svelte
     ui/                    Design-System: tokens.css + Atom-Komponenten
                            (Button, Card, Field, FilePicker, …)
   assets/defaults/         Gebündelte Default-Grafiken + Sounds
@@ -117,8 +118,31 @@ Default-Port: 8080. `webhookBindAllInterfaces=true` → 0.0.0.0, sonst nur local
 
 - **9:16 Aspect-Lock**: JS-Resize-Listener in `App.svelte` snappt nach jedem Resize
 - **Drag**: `data-tauri-drag-region` auf `.ladder`, `.level-row` und der Header-Drag-Area in Settings
-- **Auto-Skalierung**: Inhalt skaliert proportional mit Fensterbreite (Referenz 450px). Multipliziert mit `cfg.overlayScale`.
+- **Auto-Skalierung**: Inhalt skaliert proportional mit Fensterbreite (Referenz 450px). Pro-Element-Skalierung über die jeweiligen `*Scale`-Felder im Settings-Modell (vom Edit-Modus verwaltet).
 - **Transparenz**: `transparent: true` + `decorations: false` für OBS Window-Capture
+
+## Edit-Modus (Pflicht für neue Overlay-Elemente)
+
+Taste **E** öffnet einen Photoshop-artigen Edit-Modus im Overlay (siehe `src/lib/editor/Editor.svelte`).
+Position und Skalierung jedes Overlay-Elements werden dort per Drag, Resize-Handles und
+Center-Buttons gesetzt — **niemals** über eigene Number-Inputs in den Settings.
+
+**Wenn du ein neues Overlay-Element hinzufügst, MUSS es Edit-Modus-kompatibel sein:**
+
+1. Neue Settings-Felder hinzufügen — Konvention (Referenz-450px-Raum):
+   - Uniform skalierbar: `<name>X`, `<name>Y`, `<name>Scale`
+   - Frei skalierbar (W/H unabhängig): `<name>X`, `<name>Y`, `<name>Width`, `<name>Height`
+   Defaults in `defaults.ts` setzen. Werte werden bei Auto-Skalierung mit `windowWidth/450` multipliziert.
+2. Die Komponente muss:
+   - Eine `editMode: boolean` Prop akzeptieren und `data-tauri-drag-region={editMode ? null : true}` setzen
+     (sonst zieht der User das Fenster statt das Element).
+   - Eine `getElement()`-Funktion exportieren, die das outer DOM-Element zurückgibt (für Bbox-Messung).
+3. In `App.svelte`:
+   - Komponente mit `bind:this={...Ref}` rendern und `editMode` weiterreichen.
+   - `buildEditTargets()` einen neuen Eintrag liefern lassen (`kind: "uniform"` oder `kind: "wh"`,
+     entsprechende `move`/`setScale`/`setSize` Setter über `settings.update(...)`).
+4. **Keine** Number-Inputs für Position/Größe in den Settings-Sections. Maximal einen
+   `Callout` mit Hinweis auf den Edit-Modus, falls passend.
 
 ## Bekannte Stolperfallen
 

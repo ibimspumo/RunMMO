@@ -5,6 +5,15 @@
 
   export let cfg: AppSettings;
   export let state: LadderState;
+  export let editMode = false;
+
+  let innerEl: HTMLDivElement;
+  export function getElement(): HTMLDivElement | undefined {
+    return innerEl;
+  }
+
+  // Basisgröße des Tachos (px im Referenz-450-Raum). Skalierung via tachoScale.
+  const TACHO_BASE_SIZE = 360;
 
   const REFERENCE_WIDTH = 450;
   let windowWidth = REFERENCE_WIDTH;
@@ -42,9 +51,9 @@
   });
 
   $: autoScale = windowWidth / REFERENCE_WIDTH;
-  $: effectiveScale = cfg.overlayScale * autoScale;
-  $: effectiveOffsetLeft = cfg.overlayOffsetLeft * autoScale;
-  $: effectiveOffsetTop = cfg.overlayOffsetTop * autoScale;
+  $: effectiveScale = cfg.tachoScale * autoScale;
+  $: effectiveOffsetLeft = cfg.tachoX * autoScale;
+  $: effectiveOffsetTop = cfg.tachoY * autoScale;
 
   // Bogenform: arcDeg = Öffnungswinkel des Bogens (180=Halbkreis, 270=Auto-Tacho).
   // Start-Winkel links unten, Sweep im Uhrzeigersinn nach rechts unten.
@@ -155,12 +164,13 @@
   })();
 </script>
 
-<div class="tacho-wrap" data-tauri-drag-region>
+<div class="tacho-wrap" data-tauri-drag-region={editMode ? null : true}>
   <div
     class="tacho"
-    data-tauri-drag-region
+    bind:this={innerEl}
+    data-tauri-drag-region={editMode ? null : true}
     style="
-      width: {cfg.tachoSize}px;
+      width: {TACHO_BASE_SIZE}px;
       transform: translate({effectiveOffsetLeft}px, {effectiveOffsetTop}px) scale({effectiveScale});
     "
   >

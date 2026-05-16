@@ -5,13 +5,17 @@
 
   export let cfg: AppSettings;
   export let state: LadderState;
+  export let editMode = false;
 
-  // Anzeige von oben nach unten: 12KMH oben, 1KMH unten
+  // DOM-Ref des inneren .ladder-Elements (für Editor-Bbox-Messung).
+  let innerEl: HTMLDivElement;
+  export function getElement(): HTMLDivElement | undefined {
+    return innerEl;
+  }
+
   $: rows = Array.from({ length: 12 }, (_, i) => 12 - i);
   $: currentLevel1Based = state.currentLevel + 1;
 
-  // Auto-Skalierung: bezogen auf Default-Fenster (450px breit = 1.0).
-  // Bei größerem Fenster wachsen alle Inhalte proportional mit.
   const REFERENCE_WIDTH = 450;
   let windowWidth = REFERENCE_WIDTH;
 
@@ -28,15 +32,16 @@
   });
 
   $: autoScale = windowWidth / REFERENCE_WIDTH;
-  $: effectiveScale = cfg.overlayScale * autoScale;
-  $: effectiveOffsetLeft = cfg.overlayOffsetLeft * autoScale;
-  $: effectiveOffsetTop = cfg.overlayOffsetTop * autoScale;
+  $: effectiveScale = cfg.ladderScale * autoScale;
+  $: effectiveOffsetLeft = cfg.ladderX * autoScale;
+  $: effectiveOffsetTop = cfg.ladderY * autoScale;
 </script>
 
-<div class="ladder-wrap" data-tauri-drag-region>
+<div class="ladder-wrap" data-tauri-drag-region={editMode ? null : true}>
   <div
     class="ladder"
-    data-tauri-drag-region
+    bind:this={innerEl}
+    data-tauri-drag-region={editMode ? null : true}
     style="
       gap: {cfg.spacingBetweenLevels}px;
       transform: translate({effectiveOffsetLeft}px, {effectiveOffsetTop}px) scale({effectiveScale});
