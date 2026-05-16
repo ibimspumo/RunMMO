@@ -1,4 +1,4 @@
-import { writable, type Writable } from "svelte/store";
+import { get, writable, type Writable } from "svelte/store";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Store } from "@tauri-apps/plugin-store";
@@ -161,4 +161,49 @@ export function streamHpDamageSoundUrl(cfg: AppSettings): string | null {
   return cfg.streamHpDamageSoundPath
     ? convertFileSrc(cfg.streamHpDamageSoundPath)
     : null;
+}
+
+// Pulse-Signal für die HP-Leiste, um Heal/Damage visuell zu zeigen.
+// `seq` macht jeden Pulse eindeutig, damit identische {kind, amount} nicht
+// vom Subscriber als Duplikat verschluckt werden.
+export type HpPulse = { kind: "heal" | "damage"; amount: number; seq: number };
+export const hpPulse: Writable<HpPulse | null> = writable(null);
+
+let pulseSeq = 0;
+function emitPulse(kind: "heal" | "damage", amount: number) {
+  pulseSeq += 1;
+  hpPulse.set({ kind, amount, seq: pulseSeq });
+}
+
+function playUrl(url: string | null, volumeDb: number) {
+  if (!url) return;
+  const a = new Audio(url);
+  a.volume = Math.max(0, Math.min(1, Math.pow(10, volumeDb / 20)));
+  a.play().catch((err) => console.warn("hp sound failed", err));
+}
+
+// Gemeinsame Heal/Damage-Logik. Wird sowohl von Webhook-Events als auch
+// von den Test-Buttons im Settings-Panel benutzt — gleiche Effekte überall.
+export function triggerHeal(amount: number): void {
+  const cfg = get(settings);
+  if (cfg.mode !== "mmo" || !cfg.streamHpEnabled) return;
+  if (!Number.isFinite(amount) || amount <= 0) return;
+  ladderState.update((s) => ({
+    ...s,
+    hp: Math.min(cfg.streamHpMax, s.hp + amount),
+  }));
+  playUrl(streamHpHealSoundUrl(cfg), cfg.volumeDb);
+  emitPulse("heal", amount);
+}
+
+export function triggerDamage(amount: number): void {
+  const cfg = get(settings);
+  if (cfg.mode !== "mmo" || !cfg.streamHpEnabled) return;
+  if (!Number.isFinite(amount) || amount <= 0) return;
+  ladderState.update((s) => ({
+    ...s,
+    hp: Math.max(0, s.hp - amount),
+  }));
+  playUrl(streamHpDamageSoundUrl(cfg), cfg.volumeDb);
+  emitPulse("damage", amount);
 }

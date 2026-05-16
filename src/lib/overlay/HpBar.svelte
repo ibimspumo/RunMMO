@@ -2,12 +2,14 @@
   import { onMount, onDestroy } from "svelte";
   import type { AppSettings, LadderState } from "../types";
   import { rgbaToCss } from "../defaults";
+  import { hpPulse } from "../stores";
 
   export let cfg: AppSettings;
   export let state: LadderState;
 
-  // DOM-Ref für Editor-Bbox.
+  // DOM-Refs für Editor-Bbox + Effekt-Animationen.
   let innerEl: HTMLDivElement;
+  let flashEl: HTMLDivElement;
   export function getElement(): HTMLDivElement | undefined {
     return innerEl;
   }
@@ -20,12 +22,85 @@
     windowWidth = window.innerWidth || REFERENCE_WIDTH;
   }
 
+  // Floating "+"-Partikel beim Heilen. Pro Heal-Pulse werden mehrere mit
+  // leichten Zufalls-Variationen gespawnt; Anzahl/Größe wachsen mit der Menge.
+  type Particle = {
+    id: number;
+    x: number;
+    size: number;
+    drift: number;
+    dur: number;
+  };
+  let particles: Particle[] = [];
+  let nextParticleId = 0;
+
+  function spawnHealParticles(amount: number) {
+    if (!barWidth || !barHeight) return;
+    const count = Math.max(3, Math.min(18, 3 + Math.floor(amount / 3)));
+    const baseSize = Math.max(14, barHeight * 0.75);
+    const sizeBoost = Math.min(1.8, 1 + amount / 60);
+    const dur = 900 + Math.min(600, amount * 8);
+    const ids: number[] = [];
+    const fresh: Particle[] = [];
+    for (let i = 0; i < count; i++) {
+      const id = ++nextParticleId;
+      ids.push(id);
+      fresh.push({
+        id,
+        x: Math.random() * barWidth,
+        size: baseSize * sizeBoost * (0.85 + Math.random() * 0.3),
+        drift: (Math.random() - 0.5) * 30 * autoScale,
+        dur: dur * (0.85 + Math.random() * 0.3),
+      });
+    }
+    particles = [...particles, ...fresh];
+    setTimeout(() => {
+      particles = particles.filter((p) => !ids.includes(p.id));
+    }, dur * 1.4 + 100);
+  }
+
+  function triggerDamageFx(amount: number) {
+    const intensity = Math.min(1, 0.45 + amount / 30);
+    if (flashEl?.animate) {
+      flashEl.animate(
+        [
+          { opacity: intensity, background: `rgba(255, 40, 40, ${intensity})` },
+          { opacity: intensity * 0.6, background: `rgba(255, 60, 60, ${intensity * 0.6})`, offset: 0.3 },
+          { opacity: 0, background: "rgba(255, 40, 40, 0)" },
+        ],
+        { duration: 480, easing: "ease-out" },
+      );
+    }
+    if (innerEl?.animate) {
+      const mag = Math.min(8, 3 + amount / 8) * autoScale;
+      innerEl.animate(
+        [
+          { transform: "translateX(0)" },
+          { transform: `translateX(${-mag}px)` },
+          { transform: `translateX(${mag}px)` },
+          { transform: `translateX(${-mag * 0.6}px)` },
+          { transform: `translateX(${mag * 0.4}px)` },
+          { transform: "translateX(0)" },
+        ],
+        { duration: 280, easing: "ease-out" },
+      );
+    }
+  }
+
+  // Pulse-Subscription: ignoriert den initialen null-Wert.
+  const unsubPulse = hpPulse.subscribe((p) => {
+    if (!p) return;
+    if (p.kind === "heal") spawnHealParticles(p.amount);
+    else if (p.kind === "damage") triggerDamageFx(p.amount);
+  });
+
   onMount(() => {
     updateSize();
     window.addEventListener("resize", updateSize);
   });
   onDestroy(() => {
     window.removeEventListener("resize", updateSize);
+    unsubPulse();
   });
 
   $: autoScale = windowWidth / REFERENCE_WIDTH;
@@ -75,6 +150,9 @@
     const formatted = s >= 10 ? s.toFixed(0) : s.toFixed(1).replace(/\.0$/, "");
     return `−1 HP / ${formatted}s`;
   }
+
+  // Anstieg der Heal-Partikel relativ zur Balkenhöhe (autoScale).
+  $: particleRiseY = -(barHeight + 40 * autoScale);
 </script>
 
 <div
@@ -103,6 +181,11 @@
         border-radius: {innerRadius}px;
       "
     ></div>
+    <div
+      class="damage-flash"
+      bind:this={flashEl}
+      style="border-radius: {innerRadius}px;"
+    ></div>
     {#if cfg.streamHpShowNumbers}
       <span
         class="hp-text"
@@ -114,6 +197,27 @@
         {hpText}
       </span>
     {/if}
+  </div>
+
+  <div
+    class="heal-particles"
+    style="
+      width: {barWidth}px;
+      height: {barHeight}px;
+    "
+  >
+    {#each particles as p (p.id)}
+      <span
+        class="heal-plus"
+        style="
+          left: {p.x}px;
+          font-size: {p.size}px;
+          --drift: {p.drift}px;
+          --rise: {particleRiseY}px;
+          animation-duration: {p.dur}ms;
+        "
+      >+</span>
+    {/each}
   </div>
 
   {#if cfg.streamHpShowDecayRate && decayText}
@@ -151,6 +255,14 @@
     transition: width 120ms linear;
     box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.25);
   }
+  .damage-flash {
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 40, 40, 0);
+    opacity: 0;
+    mix-blend-mode: screen;
+    pointer-events: none;
+  }
   .hp-text {
     position: absolute;
     inset: 0;
@@ -166,6 +278,47 @@
       0 0 4px rgba(0, 0, 0, 0.5);
     -webkit-text-stroke: 1px rgba(0, 0, 0, 0.85);
     user-select: none;
+  }
+  .heal-particles {
+    position: absolute;
+    left: 0;
+    top: 0;
+    overflow: visible;
+    pointer-events: none;
+  }
+  .heal-plus {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(0.6);
+    color: #5cf28a;
+    font-family: "LuckiestGuy", var(--font-display, system-ui), sans-serif;
+    font-weight: 900;
+    line-height: 1;
+    text-shadow:
+      0 0 10px rgba(80, 255, 120, 0.9),
+      0 0 4px rgba(80, 255, 120, 0.7),
+      2px 2px 0 rgba(0, 0, 0, 0.85),
+      -1px -1px 0 rgba(0, 0, 0, 0.6);
+    -webkit-text-stroke: 1px rgba(0, 40, 10, 0.9);
+    opacity: 0;
+    animation-name: heal-rise;
+    animation-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1);
+    animation-fill-mode: forwards;
+    will-change: transform, opacity;
+  }
+  @keyframes heal-rise {
+    0% {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(0.5);
+    }
+    18% {
+      opacity: 1;
+      transform: translate(-50%, calc(-50% - 6px)) scale(1.15);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(calc(-50% + var(--drift)), calc(-50% + var(--rise))) scale(0.9);
+    }
   }
   .decay-text {
     display: block;

@@ -124,6 +124,11 @@
       onPlay={playDamage}
     />
   </Field>
+
+  <Callout variant="info">
+    Tasten zum Testen im Overlay (nicht im Settings-Panel):
+    <code>P</code> = +10 HP, <code>M</code> = −10 HP.
+  </Callout>
 </Card>
 
 <Card title="Aussehen">

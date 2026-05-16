@@ -21,8 +21,8 @@
     bindBackendEvents,
     soundUrlForLevel,
     streamHpDeathSoundUrl,
-    streamHpHealSoundUrl,
-    streamHpDamageSoundUrl,
+    triggerHeal,
+    triggerDamage,
   } from "./lib/stores";
 
   let cfg: AppSettings = defaultSettings();
@@ -92,25 +92,8 @@
     a.play().catch((err) => console.warn(`${label} sound failed`, err));
   }
 
-  function applyHeal(amount: number) {
-    if (cfg.mode !== "mmo" || !cfg.streamHpEnabled) return;
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    ladderState.update((s) => ({
-      ...s,
-      hp: Math.min(cfg.streamHpMax, s.hp + amount),
-    }));
-    playUrl(streamHpHealSoundUrl(cfg), "heal");
-  }
-
-  function applyDamage(amount: number) {
-    if (cfg.mode !== "mmo" || !cfg.streamHpEnabled) return;
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    ladderState.update((s) => ({
-      ...s,
-      hp: Math.max(0, s.hp - amount),
-    }));
-    playUrl(streamHpDamageSoundUrl(cfg), "damage");
-  }
+  // Heal/Damage liegen in stores.ts, damit Webhooks und die Test-Buttons
+  // im Settings-Panel exakt denselben Code ausführen (inkl. Pulse für Effekte).
 
   // HP=0 → Death-Sound einmal abspielen. Re-Trigger nach Heilung > 0.
   $: if (cfg.mode === "mmo" && cfg.streamHpEnabled && state.hp <= 0 && !deathSoundFired) {
@@ -206,19 +189,14 @@
     else if (diff === -1) moveDown();
   }
 
-  function printStatus() {
-    console.log("Status:", {
-      level: state.currentLevel + 1,
-      timeLeft: state.timeLeft.toFixed(2),
-      isRunning: state.isRunning,
-    });
-  }
-
   function printHelp() {
     console.log(
-      "Steuerung:\n  W/↑: Level hoch\n  S/↓: Level runter\n  R: Reset\n  T: Timer start/stop\n  P: Status\n  H: Hilfe\n  ESC: Einstellungen",
+      "Steuerung:\n  W/↑: Level hoch\n  S/↓: Level runter\n  R: Reset\n  T: Timer start/stop\n  P: +10 HP (Heal-Test)\n  M: −10 HP (Damage-Test)\n  H: Hilfe\n  E: Edit-Modus\n  ESC: Einstellungen",
     );
   }
+
+  // Standard-Menge für die Heal/Damage-Test-Tasten (entspricht dem Webhook-Default).
+  const HP_TEST_AMOUNT = 10;
 
   // Timer-Ablauf (nur im Simple-Modus): wenn timeLeft = 0 und running → move_down auslösen
   $: if (cfg.mode === "simple" && state.isRunning && state.timeLeft <= 0) {
@@ -259,8 +237,8 @@
           },
         });
       },
-      (amount) => applyHeal(amount),
-      (amount) => applyDamage(amount),
+      (amount) => triggerHeal(amount),
+      (amount) => triggerDamage(amount),
     );
   }
 
@@ -363,7 +341,10 @@
         toggleTimer();
         break;
       case "p":
-        printStatus();
+        triggerHeal(HP_TEST_AMOUNT);
+        break;
+      case "m":
+        triggerDamage(HP_TEST_AMOUNT);
         break;
       case "h":
         printHelp();
