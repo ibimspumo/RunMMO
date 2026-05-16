@@ -11,6 +11,7 @@
   import { rgbaToCss } from "../defaults";
   import {
     skillIconUrl,
+    skillGiftUrl,
     skillRuntime,
     findMatchingRule,
   } from "../stores";
@@ -111,6 +112,14 @@
         return "Lvl ↓";
       case "levelReset":
         return "Reset";
+      case "setLevel":
+        return `→${e.level ?? "?"}`;
+      case "multiplier":
+        return `${e.factor ?? 1}×`;
+      case "wheel":
+        return "🎰";
+      case "none":
+        return "—";
     }
   }
 
@@ -209,6 +218,35 @@
 
       {#if info.matchedRule === null && cfg.skillBarShowInactive && cfg.skillBarStyle !== "clean"}
         <div class="locked-veil"></div>
+      {/if}
+
+      <!-- Gift-Overlay (zeigt das TikTok-Geschenk, das diesen Skill triggert) -->
+      {#if cfg.skillGiftStyle.enabled}
+        {@const giftUrl = skillGiftUrl(skill)}
+        {#if giftUrl}
+          {@const giftPx = Math.max(4, slotPx * cfg.skillGiftStyle.sizeFrac)}
+          {@const giftLeft = cfg.skillGiftStyle.offsetX * slotPx}
+          {@const giftTop = cfg.skillGiftStyle.offsetY * slotPx}
+          {@const ds = cfg.skillGiftStyle.shadowSize}
+          {@const sc = cfg.skillGiftStyle.shadowColor}
+          <img
+            class="slot-gift"
+            data-design-target={designMode ? "skill.gift" : null}
+            src={giftUrl}
+            alt=""
+            draggable="false"
+            style="
+              width: {giftPx}px;
+              height: {giftPx}px;
+              left: {giftLeft}px;
+              top: {giftTop}px;
+              opacity: {cfg.skillGiftStyle.opacity};
+              filter: {ds > 0
+                ? `drop-shadow(0 0 ${ds}px rgba(${Math.round(sc.r * 255)},${Math.round(sc.g * 255)},${Math.round(sc.b * 255)},${sc.a}))`
+                : 'none'};
+            "
+          />
+        {/if}
       {/if}
 
       <!-- Status-Effekt-Text -->
@@ -321,6 +359,15 @@
     object-fit: contain;
     user-select: none;
     pointer-events: none;
+  }
+  /* Gift-Badge: per absolute Position + offset gesteuert (Design-Modus). */
+  .slot-gift {
+    position: absolute;
+    object-fit: contain;
+    transform: translate(-50%, -50%);
+    user-select: none;
+    pointer-events: none;
+    z-index: 2;
   }
   .slot-fallback {
     position: absolute;

@@ -8,11 +8,23 @@
 //   subject    → Kern-Beschreibung für den Prompt
 //   palette    → Farbpalette-Hinweis für stilistische Konsistenz
 
-const STYLE = (subject, palette) => `A single video game skill icon for an RPG inventory on a fully transparent background.
+// Stil-Templates. Subject + Palette werden eingesetzt, alles andere ist style-spezifisch.
+const STYLES = {
+  painterly: (subject, palette) => `A single video game skill icon for an RPG inventory on a fully transparent background.
 Style: Stylized MMORPG inventory icon, painterly with soft cel-shading, ${palette} color palette with hints of golden light highlights, clean readable silhouette.
 Subject: ${subject}.
 Composition: Centered, fills ~80% of the square frame, no border, no text, no UI chrome, no shadow plate beneath. Clear edge silhouette so it reads at small sizes (64px). Crisp edges.
-Output: square aspect ratio, transparent background (no checkerboard, no white), high contrast.`;
+Output: square aspect ratio, transparent background (no checkerboard, no white), high contrast.`,
+
+  fluent: (subject, palette) => `A single skill icon for an RPG inventory on a fully transparent background.
+Style: Soft matte 3D rendered icon with very rounded organic shapes, friendly approachable cartoony proportions, gentle clean ${palette} palette, soft ambient lighting with subtle integrated drop shadow under elements, slightly toy-like and warm, smooth tactile surfaces with no harsh specular reflections, the look of a modern friendly system emoji or app illustration.
+Subject: ${subject}.
+Composition: Centered, fills ~80% of the square frame, no border, no text, no UI chrome, no shadow plate beneath. Clear edge silhouette so it reads at small sizes (64px).
+Output: square aspect ratio, transparent background (no checkerboard, no white), friendly and recognizable.`,
+};
+
+// Default-Style für Rückwärtskompatibilität
+const STYLE = STYLES.painterly;
 
 export const CATALOG = [
   // === HEAL ===
@@ -203,6 +215,18 @@ export const CATALOG = [
   { key: "dice", name: "Würfel", category: "misc",
     subject: "Two playful red gambling dice tumbling at slight angles with white pips and slight motion lines",
     palette: "rich red dice with white pips" },
+  { key: "roulette", name: "Roulette", category: "misc",
+    subject: "A casino roulette wheel viewed from a slight three-quarter angle, alternating red and black numbered pockets with one green zero pocket, polished gold rim and ornate metal spokes, a small white ball resting in one pocket",
+    palette: "casino red and black, polished gold rim, green zero accent" },
+  { key: "slot_machine", name: "Spielautomat", category: "misc",
+    subject: "A chunky cartoon casino slot machine cabinet with three side-by-side reels showing 7-7-7 triple lucky sevens, a big red lever pull on the right side, ornate gold trim and a small coin slot",
+    palette: "bright cherry red, polished gold, glowing white reel sevens" },
+  { key: "cards", name: "Spielkarten", category: "misc",
+    subject: "A fan of four playing cards held together with a slight curl, showing a royal flush (Ace, King, Queen of spades visible) with crisp black suit symbols on white card faces and a decorative red back peeking",
+    palette: "crisp white cards, black suits, classic crimson card back" },
+  { key: "chips", name: "Casino-Chips", category: "misc",
+    subject: "A small leaning stack of three casino gambling chips (top one slightly askew), one red, one green, one blue, each with white edge dashes and a star or dollar sign center, slight glossy highlight",
+    palette: "vibrant casino red, green, and blue with crisp white edge stripes" },
   { key: "coin", name: "Münze", category: "misc",
     subject: "A glossy gold coin with a star symbol stamped on the front, slight shine highlight on the edge",
     palette: "warm gold and bronze" },
@@ -241,6 +265,9 @@ export const CATEGORY_LABELS = {
   misc: "Sonstiges",
 };
 
-export function buildPrompt(entry) {
-  return STYLE(entry.subject, entry.palette);
+export function buildPrompt(entry, styleKey = "painterly") {
+  const builder = STYLES[styleKey] ?? STYLE;
+  return builder(entry.subject, entry.palette);
 }
+
+export const STYLE_KEYS = Object.keys(STYLES);

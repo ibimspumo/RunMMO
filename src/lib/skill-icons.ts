@@ -1,26 +1,47 @@
 // Skill-Icon-Bibliothek. Wird per import.meta.glob automatisch aus
-// src/assets/defaults/graphics/skills/skill_*.png geladen — neue Icons im
-// Ordner sind sofort verfügbar, kein manuelles Eintragen nötig.
-//
-// Der Katalog (Metadaten) ist hier vorgehalten; URLs kommen aus dem Glob.
-// Wenn ein Katalog-Eintrag kein passendes Bild hat, fehlt er einfach in der
-// fertigen Liste — kein Fehler.
+// src/assets/defaults/graphics/skills/ geladen. Zwei Stile parallel:
+//  - "painterly" → skills/skill_<key>.png       (Standard, MMORPG-Look)
+//  - "fluent"    → skills/fluent/skill_<key>.png (MS Fluent 3D Emoji)
+// Neue Icons im jeweiligen Ordner sind sofort verfügbar.
 
-const iconModules = import.meta.glob(
+export type IconStyle = "painterly" | "fluent";
+
+const painterlyModules = import.meta.glob(
   "../assets/defaults/graphics/skills/skill_*.png",
   { eager: true, query: "?url", import: "default" },
 ) as Record<string, string>;
+const fluentModules = import.meta.glob(
+  "../assets/defaults/graphics/skills/fluent/skill_*.png",
+  { eager: true, query: "?url", import: "default" },
+) as Record<string, string>;
 
-// Map: key → URL. Pfad-Form: ".../skills/skill_<key>.png" → "<key>"
-export const SKILL_ICON_URLS: Record<string, string> = (() => {
+function buildMap(modules: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const [p, url] of Object.entries(iconModules)) {
+  for (const [p, url] of Object.entries(modules)) {
     const m = p.match(/skill_([^/]+)\.png$/);
     if (!m) continue;
     out[m[1]] = url;
   }
   return out;
-})();
+}
+
+const PAINTERLY_URLS = buildMap(painterlyModules);
+const FLUENT_URLS = buildMap(fluentModules);
+
+// Backwards-compat: war früher der einzige Style.
+export const SKILL_ICON_URLS = PAINTERLY_URLS;
+
+export function iconUrlsForStyle(style: IconStyle): Record<string, string> {
+  return style === "fluent" ? FLUENT_URLS : PAINTERLY_URLS;
+}
+
+// Welche Stile haben für diesen Key ein Bild?
+export function availableStylesFor(key: string): IconStyle[] {
+  const out: IconStyle[] = [];
+  if (PAINTERLY_URLS[key]) out.push("painterly");
+  if (FLUENT_URLS[key]) out.push("fluent");
+  return out;
+}
 
 export interface SkillIconEntry {
   key: string;
@@ -127,6 +148,10 @@ const RAW_CATALOG: SkillIconEntry[] = [
   // Sonstiges
   { key: "lucky_wheel", name: "Glücksrad", category: "misc" },
   { key: "dice", name: "Würfel", category: "misc" },
+  { key: "roulette", name: "Roulette", category: "misc" },
+  { key: "slot_machine", name: "Spielautomat", category: "misc" },
+  { key: "cards", name: "Spielkarten", category: "misc" },
+  { key: "chips", name: "Casino-Chips", category: "misc" },
   { key: "coin", name: "Münze", category: "misc" },
   { key: "gem", name: "Edelstein", category: "misc" },
   { key: "chest", name: "Schatzkiste", category: "misc" },
@@ -137,9 +162,11 @@ const RAW_CATALOG: SkillIconEntry[] = [
   { key: "hourglass", name: "Sanduhr", category: "misc" },
 ];
 
-// Nur Einträge mit existierendem PNG. Schützt vor halb-generierten States.
+// Katalog: ein Eintrag erscheint, sobald er in MINDESTENS einem Stil existiert.
+// (Beim Generieren des Fluent-Sets kann es kurzfristig Lücken geben — der
+// Resolver fällt automatisch auf den anderen Stil zurück.)
 export const SKILL_CATALOG: SkillIconEntry[] = RAW_CATALOG.filter(
-  (e) => SKILL_ICON_URLS[e.key],
+  (e) => PAINTERLY_URLS[e.key] || FLUENT_URLS[e.key],
 );
 
 // Suche nach Eintrag (für Anzeige des aktuell gewählten Icons).
@@ -148,9 +175,17 @@ export function findIconEntry(key: string): SkillIconEntry | null {
 }
 
 // Resolver: gibt die URL für ein iconPath im Format "default:<key>" zurück.
-// Falls der Key nicht im Glob ist → null.
-export function resolveDefaultIcon(iconPath: string): string | null {
+// Wenn der gewünschte Stil das Bild nicht hat → Fallback auf den anderen Stil.
+// Wenn beide leer → null.
+export function resolveDefaultIcon(
+  iconPath: string,
+  style: IconStyle = "painterly",
+): string | null {
   if (!iconPath.startsWith("default:")) return null;
   const key = iconPath.slice("default:".length);
-  return SKILL_ICON_URLS[key] ?? null;
+  const primary = iconUrlsForStyle(style);
+  if (primary[key]) return primary[key];
+  // Fallback: der jeweils andere Stil.
+  const fallback = style === "fluent" ? PAINTERLY_URLS : FLUENT_URLS;
+  return fallback[key] ?? null;
 }

@@ -42,6 +42,8 @@ export function defaultSettings(): AppSettings {
     webhookPort: 8080,
     webhookEnabled: true,
     webhookBindAllInterfaces: true,
+    webhookProcessingMode: "immediate",
+    webhookQueueIntervalMs: 250,
 
     levelColors: [
       c(0.8, 0.2, 0.2),
@@ -130,6 +132,7 @@ export function defaultSettings(): AppSettings {
     skillBarGap: 8,
     skillBarShowInactive: true,
     skillBarStyle: "framed",
+    iconStyle: "painterly",
 
     wheelX: 75,
     wheelY: 220,
@@ -161,6 +164,44 @@ export function defaultSettings(): AppSettings {
       offsetY: 1.18,
     },
     skillMiniWheelEnabled: true,
+
+    skillGiftStyle: {
+      enabled: true,
+      sizeFrac: 0.65,        // 65% der Slot-Höhe
+      offsetX: 0.75,
+      offsetY: 0.25,
+      opacity: 1,
+      shadowSize: 4,
+      shadowColor: c(0, 0, 0, 0.7),
+    },
+
+    buffBarX: 75,
+    buffBarY: 180,
+    buffBarSize: 30,
+    buffBarGap: 6,
+    buffBarBgColor: c(0.06, 0.09, 0.16, 0.85),
+    buffBarTextColor: c(1, 1, 1, 1),
+    buffBarBorderColor: c(1, 1, 1, 0.18),
+    buffBarShowIcon: true,
+  };
+}
+
+// Effekt-Skeleton mit allen Pflichtfeldern. Hilft, in Defaults konkrete
+// Effekte konzis aufzubauen.
+function effect(
+  kind: import("./types").SkillEffectKind,
+  patch: Partial<import("./types").SkillEffect> = {},
+): import("./types").SkillEffect {
+  return {
+    kind,
+    amount: 0,
+    level: 1,
+    durationSec: 0,
+    factor: 1,
+    multipliedKinds: [],
+    segments: [],
+    label: "",
+    ...patch,
   };
 }
 
@@ -172,21 +213,22 @@ export function exampleHealSkill(): import("./types").Skill {
     id: 1,
     name: "Heilung",
     iconPath: "default:heal",
+    giftIconPath: null,
     cooldownSec: 5,
     rules: [
       {
         conditions: [{ minKmh: 1, maxKmh: 3, minHpPct: null, maxHpPct: null }],
-        effects: [{ kind: "heal", amount: 250 }],
+        effects: [effect("heal", { amount: 250 })],
         probability: 100,
       },
       {
         conditions: [{ minKmh: 4, maxKmh: 7, minHpPct: null, maxHpPct: null }],
-        effects: [{ kind: "heal", amount: 150 }],
+        effects: [effect("heal", { amount: 150 })],
         probability: 80,
       },
       {
         conditions: [{ minKmh: 8, maxKmh: 12, minHpPct: null, maxHpPct: null }],
-        effects: [{ kind: "heal", amount: 75 }],
+        effects: [effect("heal", { amount: 75 })],
         probability: 50,
       },
     ],

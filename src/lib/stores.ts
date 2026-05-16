@@ -9,7 +9,9 @@ import type {
   LadderState,
   Skill,
   SkillEffect,
+  SkillEffectKind,
   SkillRule,
+  WheelSegment,
 } from "./types";
 import {
   defaultSettings,
@@ -18,6 +20,8 @@ import {
   DEFAULT_DOWN_SOUND_URL,
 } from "./defaults";
 import { resolveDefaultIcon } from "./skill-icons";
+import { resolveGiftIcon } from "./gift-icons";
+import { playPooled, type AudioCategory } from "./audio-pool";
 
 const SETTINGS_FILE = "settings.json";
 const SETTINGS_KEY = "settings";
@@ -67,6 +71,35 @@ export function soundUrlForLevel(
   }
 }
 
+// Migration: alte gespeicherte Effekte können nur `kind` + `amount` haben.
+// Fülle alle neuen Pflichtfelder mit Defaults auf — rekursiv auch in
+// Wheel-Segmenten.
+function migrateEffect(e: SkillEffect): SkillEffect {
+  const out: SkillEffect = {
+    kind: (e?.kind as SkillEffectKind) ?? "heal",
+    amount: typeof e?.amount === "number" ? e.amount : 0,
+    level: typeof e?.level === "number" ? e.level : 1,
+    durationSec: typeof e?.durationSec === "number" ? e.durationSec : 0,
+    factor: typeof e?.factor === "number" ? e.factor : 1,
+    multipliedKinds: Array.isArray(e?.multipliedKinds)
+      ? (e.multipliedKinds as SkillEffectKind[])
+      : [],
+    segments: Array.isArray(e?.segments)
+      ? e.segments.map((s) => ({
+          label: typeof s?.label === "string" ? s.label : "",
+          color:
+            s?.color && typeof s.color === "object"
+              ? s.color
+              : { r: 0.5, g: 0.5, b: 0.5, a: 1 },
+          weight: typeof s?.weight === "number" ? s.weight : 1,
+          effects: Array.isArray(s?.effects) ? s.effects.map(migrateEffect) : [],
+        }))
+      : [],
+    label: typeof e?.label === "string" ? e.label : "",
+  };
+  return out;
+}
+
 let store: Awaited<ReturnType<typeof Store.load>> | null = null;
 
 export async function loadSettings(): Promise<void> {
@@ -98,6 +131,20 @@ export async function loadSettings(): Promise<void> {
     const arr = merged.streamHpSecondsPerHpByLevel.slice(0, 12);
     while (arr.length < 12) arr.push(fallback[arr.length]);
     merged.streamHpSecondsPerHpByLevel = arr;
+
+    // Migration: alte Skills haben kein giftIconPath-Feld.
+    if (Array.isArray(merged.skills)) {
+      merged.skills = merged.skills.map((s) => ({
+        ...s,
+        giftIconPath: s.giftIconPath ?? null,
+        rules: Array.isArray(s.rules)
+          ? s.rules.map((r) => ({
+              ...r,
+              effects: Array.isArray(r.effects) ? r.effects.map(migrateEffect) : [],
+            }))
+          : [],
+      }));
+    }
     settings.set(merged);
   }
 }
@@ -115,6 +162,55 @@ export async function saveSettings(cfg: AppSettings): Promise<void> {
   }).catch(console.error);
 }
 
+// ============== Webhook-Dispatcher (Immediate vs. Queue) ==============
+//
+// up/down/reset/status laufen IMMER sofort. gift/heal/damage/skill können
+// optional in eine FIFO geparkt werden (Settings → webhookProcessingMode).
+// Bei „queued" wird einer pro `webhookQueueIntervalMs` rausgepoppt. Die FIFO
+// ist hart begrenzt (MAX_QUEUE) — bei Überlauf wird das älteste Event
+// verworfen mit Console-Warn, damit der Speicher nie hochläuft.
+
+type EffectJob =
+  | { kind: "gift"; level: number }
+  | { kind: "heal"; amount: number }
+  | { kind: "damage"; amount: number }
+  | { kind: "skill"; id: number };
+
+const MAX_QUEUE = 1000;
+const effectQueue: EffectJob[] = [];
+let queueTimer: number | null = null;
+let queueExecutor: ((j: EffectJob) => void) | null = null;
+let queueDropCount = 0;
+let queueDropLastWarn = 0;
+
+function scheduleQueuePop() {
+  if (queueTimer !== null) return;
+  const ms = Math.max(10, get(settings).webhookQueueIntervalMs);
+  queueTimer = window.setTimeout(() => {
+    queueTimer = null;
+    const job = effectQueue.shift();
+    if (job && queueExecutor) queueExecutor(job);
+    if (effectQueue.length > 0) scheduleQueuePop();
+  }, ms);
+}
+
+function enqueueEffect(job: EffectJob) {
+  if (effectQueue.length >= MAX_QUEUE) {
+    effectQueue.shift();
+    queueDropCount++;
+    const now = Date.now();
+    if (now - queueDropLastWarn > 1000) {
+      console.warn(
+        `[webhook-queue] Backlog voll (${MAX_QUEUE}). ${queueDropCount} älteste Events verworfen.`,
+      );
+      queueDropLastWarn = now;
+      queueDropCount = 0;
+    }
+  }
+  effectQueue.push(job);
+  scheduleQueuePop();
+}
+
 export async function bindBackendEvents(
   onUp: () => void,
   onDown: () => void,
@@ -125,6 +221,23 @@ export async function bindBackendEvents(
   onDamage: (amount: number) => void,
   onSkill: (id: number) => void,
 ): Promise<void> {
+  queueExecutor = (j) => {
+    switch (j.kind) {
+      case "gift":
+        onGift(j.level);
+        break;
+      case "heal":
+        onHeal(j.amount);
+        break;
+      case "damage":
+        onDamage(j.amount);
+        break;
+      case "skill":
+        onSkill(j.id);
+        break;
+    }
+  };
+
   await listen<{
     kind: string;
     level?: number;
@@ -133,33 +246,51 @@ export async function bindBackendEvents(
     id?: number;
   }>("webhook", (event) => {
     const p = event.payload;
+    // Sofort-Befehle (kein Queue, immer direkt).
     switch (p.kind) {
       case "up":
         onUp();
-        break;
+        return;
       case "down":
         onDown();
-        break;
-      case "gift":
-        if (typeof p.level === "number") onGift(p.level);
-        break;
+        return;
       case "reset":
         onReset();
-        break;
-      case "heal":
-        if (typeof p.amount === "number") onHeal(p.amount);
-        break;
-      case "damage":
-        if (typeof p.amount === "number") onDamage(p.amount);
-        break;
-      case "skill":
-        if (typeof p.id === "number") onSkill(p.id);
-        break;
+        return;
       case "status":
         if (p.replyId) onStatusRequest(p.replyId);
+        return;
+    }
+    // Effekt-Befehle: ggf. in Queue, sonst sofort.
+    const queued = get(settings).webhookProcessingMode === "queued";
+    switch (p.kind) {
+      case "gift":
+        if (typeof p.level !== "number") return;
+        if (queued) enqueueEffect({ kind: "gift", level: p.level });
+        else onGift(p.level);
+        break;
+      case "heal":
+        if (typeof p.amount !== "number") return;
+        if (queued) enqueueEffect({ kind: "heal", amount: p.amount });
+        else onHeal(p.amount);
+        break;
+      case "damage":
+        if (typeof p.amount !== "number") return;
+        if (queued) enqueueEffect({ kind: "damage", amount: p.amount });
+        else onDamage(p.amount);
+        break;
+      case "skill":
+        if (typeof p.id !== "number") return;
+        if (queued) enqueueEffect({ kind: "skill", id: p.id });
+        else onSkill(p.id);
         break;
     }
   });
+}
+
+/** Für Debug-/Status-Anzeige in den Settings. */
+export function getWebhookQueueLength(): number {
+  return effectQueue.length;
 }
 
 // Sound-URLs für Heal/Damage (kein Fallback — wenn nicht gesetzt, kein Sound)
@@ -176,22 +307,48 @@ export function streamHpDamageSoundUrl(cfg: AppSettings): string | null {
 }
 
 // Pulse-Signal für die HP-Leiste, um Heal/Damage visuell zu zeigen.
-// `seq` macht jeden Pulse eindeutig, damit identische {kind, amount} nicht
-// vom Subscriber als Duplikat verschluckt werden.
+// `seq` macht jeden Pulse eindeutig.
+//
+// Wichtig: Bei Bursts (40-200 Events/s) emittieren wir NICHT pro Event einen
+// Pulse — das würde HpBar überfluten. Stattdessen akkumulieren wir per
+// requestAnimationFrame und feuern max. einen Pulse pro Frame pro Kind. Die
+// HP-Math (ladderState.update) passiert weiterhin SOFORT pro Event, damit
+// /heal und /damage immer in der eingegangenen Reihenfolge auf das Leben
+// wirken (sonst könnten Effekte „in der falschen Reihenfolge sterben").
 export type HpPulse = { kind: "heal" | "damage"; amount: number; seq: number };
 export const hpPulse: Writable<HpPulse | null> = writable(null);
 
 let pulseSeq = 0;
-function emitPulse(kind: "heal" | "damage", amount: number) {
-  pulseSeq += 1;
-  hpPulse.set({ kind, amount, seq: pulseSeq });
+let pendingHeal = 0;
+let pendingDamage = 0;
+let pulseRafHandle: number | null = null;
+
+function flushPendingPulses() {
+  pulseRafHandle = null;
+  if (pendingHeal > 0) {
+    pulseSeq += 1;
+    hpPulse.set({ kind: "heal", amount: pendingHeal, seq: pulseSeq });
+    pendingHeal = 0;
+  }
+  if (pendingDamage > 0) {
+    pulseSeq += 1;
+    hpPulse.set({ kind: "damage", amount: pendingDamage, seq: pulseSeq });
+    pendingDamage = 0;
+  }
 }
 
-function playUrl(url: string | null, volumeDb: number) {
-  if (!url) return;
-  const a = new Audio(url);
-  a.volume = Math.max(0, Math.min(1, Math.pow(10, volumeDb / 20)));
-  a.play().catch((err) => console.warn("hp sound failed", err));
+function emitPulse(kind: "heal" | "damage", amount: number) {
+  if (kind === "heal") pendingHeal += amount;
+  else pendingDamage += amount;
+  if (pulseRafHandle === null) {
+    pulseRafHandle = requestAnimationFrame(flushPendingPulses);
+  }
+}
+
+// Sounds laufen über den Audio-Pool — siehe lib/audio-pool.ts. Kategorie-Cap
+// stoppt die älteste Stimme, wenn zu viele gleichzeitig laufen.
+function playHpSound(url: string | null, volumeDb: number, cat: AudioCategory) {
+  playPooled(url, volumeDb, cat);
 }
 
 // Gemeinsame Heal/Damage-Logik. Wird sowohl von Webhook-Events als auch
@@ -204,7 +361,7 @@ export function triggerHeal(amount: number): void {
     ...s,
     hp: Math.min(cfg.streamHpMax, s.hp + amount),
   }));
-  playUrl(streamHpHealSoundUrl(cfg), cfg.volumeDb);
+  playHpSound(streamHpHealSoundUrl(cfg), cfg.volumeDb, "heal");
   emitPulse("heal", amount);
 }
 
@@ -216,7 +373,7 @@ export function triggerDamage(amount: number): void {
     ...s,
     hp: Math.max(0, s.hp - amount),
   }));
-  playUrl(streamHpDamageSoundUrl(cfg), cfg.volumeDb);
+  playHpSound(streamHpDamageSoundUrl(cfg), cfg.volumeDb, "damage");
   emitPulse("damage", amount);
 }
 
@@ -224,14 +381,28 @@ export function triggerDamage(amount: number): void {
 
 // Icon-URL für einen Skill:
 //  - null → kein Icon
-//  - "default:<key>" → gebündeltes Default-Icon (aus skill-icons.ts)
+//  - "default:<key>" → gebündeltes Default-Icon (aus skill-icons.ts), Stil
+//                       wird aus den aktuellen Settings gelesen (iconStyle).
 //  - sonst → User-Pfad via convertFileSrc
 export function skillIconUrl(skill: Skill): string | null {
   if (!skill.iconPath) return null;
   if (skill.iconPath.startsWith("default:")) {
-    return resolveDefaultIcon(skill.iconPath);
+    const style = get(settings).iconStyle ?? "painterly";
+    return resolveDefaultIcon(skill.iconPath, style);
   }
   return convertFileSrc(skill.iconPath);
+}
+
+// Gift-Overlay-URL für einen Skill:
+//  - null → kein Gift
+//  - "gift:<key>" → TikTok-Gift aus der Bibliothek (gift-icons.ts)
+//  - sonst → User-Pfad via convertFileSrc
+export function skillGiftUrl(skill: Skill): string | null {
+  if (!skill.giftIconPath) return null;
+  if (skill.giftIconPath.startsWith("gift:")) {
+    return resolveGiftIcon(skill.giftIconPath);
+  }
+  return convertFileSrc(skill.giftIconPath);
 }
 
 // Cooldown-Tracking pro Skill-ID. Wird zur Laufzeit gehalten — nicht persistiert.
@@ -283,15 +454,67 @@ export function findMatchingRule(
   return null;
 }
 
-// Wheel-Anforderung: wird vom Skill-Trigger gesetzt, vom LuckyWheel konsumiert.
-// `success` ist vorbestimmt — das Rad dreht sich nur visuell zur richtigen Seite.
-export type WheelSpinRequest = {
-  skillId: number;
-  chance: number;       // 0..100
-  success: boolean;
-  effects: SkillEffect[];
-};
+// Wheel-Anforderung: wird vom Skill-Trigger oder einer Wheel-Action gesetzt,
+// vom LuckyWheel konsumiert. Zwei Modi:
+//  - "chance":   klassisches 2-Sektor-Rad (Erfolg/Fehlschlag) für die regel-
+//                interne Wahrscheinlichkeit. Erfolg ist vorbestimmt.
+//  - "segments": Action-Glücksrad mit beliebig vielen Sektoren à eigene
+//                Wahrscheinlichkeit + eigene Folge-Effekte. Sieger-Index ist
+//                vorbestimmt.
+export type WheelSpinRequest =
+  | {
+      mode: "chance";
+      skillId: number;
+      chance: number;          // 0..100
+      success: boolean;
+      effects: SkillEffect[];
+    }
+  | {
+      mode: "segments";
+      skillId: number;
+      segments: WheelSegment[];
+      winningIndex: number;
+    };
+// `wheelSpin` ist der aktuell laufende Spin (null = Rad idle).
 export const wheelSpin: Writable<WheelSpinRequest | null> = writable(null);
+
+// `wheelQueue` ist die Warteschlange aller pending Spins. Werden vom Wheel
+// strikt sequentiell abgearbeitet — Effekte feuern erst, wenn der zugehörige
+// Spin durch ist. Hartes Limit verhindert Memory-Blowup bei Burst-Triggern.
+export const wheelQueue: Writable<WheelSpinRequest[]> = writable([]);
+const MAX_WHEEL_QUEUE = 50;
+let wheelQueueDropCount = 0;
+let wheelQueueDropLastWarn = 0;
+
+export function enqueueWheelSpin(req: WheelSpinRequest): void {
+  wheelQueue.update((q) => {
+    if (q.length >= MAX_WHEEL_QUEUE) {
+      q.shift();
+      wheelQueueDropCount++;
+      const now = Date.now();
+      if (now - wheelQueueDropLastWarn > 1000) {
+        console.warn(
+          `[wheel-queue] Backlog voll (${MAX_WHEEL_QUEUE}). ${wheelQueueDropCount} älteste Spins verworfen.`,
+        );
+        wheelQueueDropLastWarn = now;
+        wheelQueueDropCount = 0;
+      }
+    }
+    return [...q, req];
+  });
+  maybeStartNextSpin();
+}
+
+// Wenn das Rad idle ist und etwas wartet → ersten Eintrag rausnehmen + starten.
+// Wird sowohl beim Enqueue als auch nach Spin-Ende aufgerufen.
+export function maybeStartNextSpin(): void {
+  if (get(wheelSpin)) return; // läuft schon
+  const q = get(wheelQueue);
+  if (q.length === 0) return;
+  const [next, ...rest] = q;
+  wheelQueue.set(rest);
+  wheelSpin.set(next);
+}
 
 // Skill-Fire-Event: einmaliger Puls mit anzuwendenden Effekten + Skill-ID.
 // App.svelte hört darauf und mappt die Effekte auf die lokalen Aktionen
@@ -339,19 +562,166 @@ export function triggerSkill(id: number): string {
     return `skill #${id} fired (100%)`;
   }
   // Probability < 100: Würfel rollen, Rad zeigt animiert das Ergebnis.
+  // Mehrere parallele Trigger werden in die Wheel-Queue eingereiht und der
+  // Reihe nach abgespielt — Effekte feuern erst bei Spin-Ende.
   const success = Math.random() * 100 < Math.max(0, Math.min(100, rule.probability));
-  // Falls schon ein Spin läuft → kurzer Pass-through (kein Stacking).
-  if (get(wheelSpin)) {
-    if (success) emitSkillFire(id, rule.effects);
-    return `skill #${id} ${success ? "fired" : "missed"} (wheel busy)`;
-  }
-  wheelSpin.set({
+  enqueueWheelSpin({
+    mode: "chance",
     skillId: id,
     chance: rule.probability,
     success,
     effects: rule.effects,
   });
-  return `skill #${id} spinning (${rule.probability}%, predetermined=${success})`;
+  return `skill #${id} queued (${rule.probability}%, predetermined=${success})`;
+}
+
+// =================== Status-Effekt-State (Buffs) ===================
+//
+// Aktive temporäre Effekte: Multiplikatoren und Level-Override. Werden von
+// einem Tick in App.svelte abgelaufen — die Stores hier sind nur Datenhalter
+// + reine Hilfsfunktionen.
+
+export interface ActiveMultiplier {
+  id: string;
+  factor: number;
+  multipliedKinds: SkillEffectKind[];
+  expiresAtMs: number;
+  sourceSkillId?: number;
+  label?: string;
+}
+
+export interface ActiveLevelOverride {
+  // 0-basiert (wie state.currentLevel). visibleLevel0 ist das, was gerade
+  // gerendert wird; underlyingLevel0 das, wohin nach Ablauf gewechselt wird.
+  visibleLevel0: number;
+  underlyingLevel0: number;
+  expiresAtMs: number;
+  sourceSkillId?: number;
+}
+
+export const activeMultipliers: Writable<ActiveMultiplier[]> = writable([]);
+export const activeLevelOverride: Writable<ActiveLevelOverride | null> = writable(null);
+
+// Multiplikator registrieren. Mehrere können gleichzeitig aktiv sein — sie
+// stapeln sich multiplikativ über das `factor`-Produkt aller, die ein Kind
+// abdecken. Bei gleicher source/factor wird der bestehende neu verlängert
+// (kein Stacking eines identischen Buffs).
+export function registerMultiplier(opts: {
+  factor: number;
+  durationSec: number;
+  multipliedKinds: SkillEffectKind[];
+  sourceSkillId?: number;
+  label?: string;
+}): void {
+  if (!Number.isFinite(opts.factor) || opts.factor <= 0) return;
+  if (!Number.isFinite(opts.durationSec) || opts.durationSec <= 0) return;
+  const expiresAtMs = Date.now() + opts.durationSec * 1000;
+  const id = `${opts.sourceSkillId ?? "x"}:${opts.factor}:${(opts.multipliedKinds ?? []).slice().sort().join(",")}`;
+  activeMultipliers.update((list) => {
+    const filtered = list.filter((m) => m.id !== id);
+    filtered.push({
+      id,
+      factor: opts.factor,
+      multipliedKinds: opts.multipliedKinds ?? [],
+      expiresAtMs,
+      sourceSkillId: opts.sourceSkillId,
+      label: opts.label,
+    });
+    return filtered;
+  });
+}
+
+// Multiplier-Produkt für ein Effekt-Kind. Liefert 1, wenn nichts greift.
+export function multiplierFactorFor(kind: SkillEffectKind, nowMs?: number): number {
+  const now = nowMs ?? Date.now();
+  let f = 1;
+  for (const m of get(activeMultipliers)) {
+    if (m.expiresAtMs <= now) continue;
+    if (m.multipliedKinds.includes(kind)) f *= m.factor;
+  }
+  return f;
+}
+
+// Abgelaufene Buffs entfernen. Wird vom Game-Loop in App.svelte einmal pro
+// Frame aufgerufen. Liefert true, wenn ein Override gerade abgelaufen ist
+// (App.svelte muss dann den visible-Level auf underlying zurücksetzen).
+export function expireBuffsTick(nowMs?: number): { overrideExpired: ActiveLevelOverride | null } {
+  const now = nowMs ?? Date.now();
+  activeMultipliers.update((list) => list.filter((m) => m.expiresAtMs > now));
+  const ov = get(activeLevelOverride);
+  if (ov && ov.expiresAtMs <= now) {
+    activeLevelOverride.set(null);
+    return { overrideExpired: ov };
+  }
+  return { overrideExpired: null };
+}
+
+// Level-Override setzen. Ohne durationSec: gar kein Override-State — der
+// Caller setzt den Level direkt (über state.currentLevel). Mit durationSec:
+// vom aktuellen Visible das Underlying übernehmen (oder das bestehende
+// Underlying weiterführen, wenn schon ein Override läuft).
+export function setLevelOverride(
+  targetLevel1Based: number,
+  durationSec: number,
+  currentVisibleLevel0: number,
+  sourceSkillId?: number,
+): void {
+  const clamped = Math.max(1, Math.min(12, Math.round(targetLevel1Based)));
+  const visible0 = clamped - 1;
+  const existing = get(activeLevelOverride);
+  const underlying0 = existing ? existing.underlyingLevel0 : currentVisibleLevel0;
+  activeLevelOverride.set({
+    visibleLevel0: visible0,
+    underlyingLevel0: underlying0,
+    expiresAtMs: Date.now() + Math.max(0, durationSec) * 1000,
+    sourceSkillId,
+  });
+}
+
+// Underlying-Level updaten — wird von App.svelte aufgerufen, wenn ein
+// moveUp/moveDown während eines aktiven Overrides reinkommt.
+export function bumpOverrideUnderlying(delta: number): boolean {
+  const ov = get(activeLevelOverride);
+  if (!ov) return false;
+  const next = Math.max(0, Math.min(11, ov.underlyingLevel0 + delta));
+  if (next === ov.underlyingLevel0) return true; // override aktiv, aber clamp
+  activeLevelOverride.set({ ...ov, underlyingLevel0: next });
+  return true;
+}
+
+// Underlying-Level explizit setzen (für levelReset während Override).
+export function setOverrideUnderlying(level0: number): boolean {
+  const ov = get(activeLevelOverride);
+  if (!ov) return false;
+  activeLevelOverride.set({
+    ...ov,
+    underlyingLevel0: Math.max(0, Math.min(11, level0)),
+  });
+  return true;
+}
+
+// Override beenden, ohne den Visible zu ändern (z.B. bei Reset/Death-Reset
+// rufen wir das nach setzen des neuen state.currentLevel auf).
+export function clearOverride(): void {
+  activeLevelOverride.set(null);
+}
+
+// Hilfs-Getter: ein Sektor wird per gewichtetem Random ausgewürfelt. Negative
+// oder NaN-Weights werden als 0 behandelt; bei summen=0 fällt es auf den
+// ersten Sektor zurück.
+export function pickWheelSegmentIndex(segments: WheelSegment[]): number {
+  if (segments.length === 0) return -1;
+  const weights = segments.map((s) =>
+    Number.isFinite(s.weight) && s.weight > 0 ? s.weight : 0,
+  );
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (total <= 0) return 0;
+  let r = Math.random() * total;
+  for (let i = 0; i < weights.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return i;
+  }
+  return weights.length - 1;
 }
 
 // Hilfsfunktion für SkillBar: liefert für einen Skill die aktuell "scheinbar"

@@ -5,6 +5,10 @@
 
   export let cfg: AppSettings;
 
+  // Toggle bindet bool — wir spiegeln auf den string-Modus.
+  let queueOn = cfg.webhookProcessingMode === "queued";
+  $: cfg.webhookProcessingMode = queueOn ? "queued" : "immediate";
+
   let localIp = "";
   invoke<string>("get_local_ip").then((ip) => (localIp = ip)).catch(() => {});
 
@@ -93,6 +97,38 @@
       </li>
     {/each}
   </ul>
+</Card>
+
+<Card title="Verarbeitung eingehender Effekte">
+  <p class="hint-text" style="margin: 0 0 var(--sp-3);">
+    Steuert nur <code>/gift</code>, <code>/heal</code>, <code>/damage</code> und <code>/skill</code>.
+    <code>/up</code>, <code>/down</code>, <code>/reset</code> und <code>/status</code> laufen immer sofort.
+  </p>
+
+  <Field
+    hint={'Sofort: Jedes eingehende Event wird unmittelbar ausgelöst (HP-Änderung, Sound, Animation). Empfohlen für Live-Streams mit vielen 1-Coin-Geschenken — der Audio-Pool fängt Bursts automatisch ab. Warteschlange: Events landen in einer FIFO und werden im eingestellten Abstand abgearbeitet — für „cinematische" Streams, bei denen jeder Effekt einzeln zur Geltung kommen soll.'}
+  >
+    <Toggle
+      bind:checked={queueOn}
+      label="Effekt-Warteschlange aktivieren (statt sofort)"
+    />
+  </Field>
+
+  <Field
+    label="Abstand zwischen Effekten"
+    inline
+    hint="Mindest-Pause zwischen zwei abgearbeiteten Effekten. Niedrige Werte (50–150 ms) wirken schnell, höhere (300–1000 ms) zelebrieren jeden Effekt einzeln."
+  >
+    <NumberInput
+      bind:value={cfg.webhookQueueIntervalMs}
+      min={10}
+      max={5000}
+      step={10}
+      suffix="ms"
+      disabled={cfg.webhookProcessingMode !== "queued"}
+      width="120px"
+    />
+  </Field>
 </Card>
 
 <Callout variant="warn">

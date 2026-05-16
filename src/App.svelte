@@ -9,6 +9,7 @@
   import HpBar from "./lib/overlay/HpBar.svelte";
   import SkillBar from "./lib/overlay/SkillBar.svelte";
   import LuckyWheel from "./lib/overlay/LuckyWheel.svelte";
+  import BuffBar from "./lib/overlay/BuffBar.svelte";
   import Settings from "./lib/settings/Settings.svelte";
   import Editor, { type EditTarget } from "./lib/editor/Editor.svelte";
   import Design from "./lib/design/Design.svelte";
@@ -28,7 +29,17 @@
     triggerDamage,
     triggerSkill,
     skillFire,
+    activeLevelOverride,
+    bumpOverrideUnderlying,
+    clearOverride,
+    setLevelOverride,
+    registerMultiplier,
+    multiplierFactorFor,
+    expireBuffsTick,
+    enqueueWheelSpin,
+    pickWheelSegmentIndex,
   } from "./lib/stores";
+  import { playPooled, primeAudioContext } from "./lib/audio-pool";
 
   let cfg: AppSettings = defaultSettings();
   let state: LadderState = { currentLevel: 0, timeLeft: 0, isRunning: false, hp: 100 };
@@ -43,6 +54,7 @@
   let hpRef: HpBar | undefined;
   let skillBarRef: SkillBar | undefined;
   let wheelRef: LuckyWheel | undefined;
+  let buffBarRef: BuffBar | undefined;
 
   // Edit-Modus: Toggle für temporäre Elemente (Glücksrad), damit man es
   // im Editor verschieben/skalieren kann, obwohl es zur Laufzeit nur
@@ -80,6 +92,15 @@
           }));
         }
       }
+      // Abgelaufene Buffs (Multiplikator / Level-Override) entfernen. Wenn
+      // der Override gerade abläuft, zurück auf den Underlying-Level.
+      if (cfg.mode === "mmo") {
+        const exp = expireBuffsTick();
+        if (exp.overrideExpired) {
+          const back0 = exp.overrideExpired.underlyingLevel0;
+          ladderState.update((s) => ({ ...s, currentLevel: back0 }));
+        }
+      }
       tickHandle = requestAnimationFrame(tick);
     };
     tickHandle = requestAnimationFrame(tick);
@@ -96,13 +117,7 @@
   }
 
   function playDeathSound() {
-    playUrl(streamHpDeathSoundUrl(cfg), "death");
-  }
-  function playUrl(url: string | null, label: string) {
-    if (!url) return;
-    const a = new Audio(url);
-    a.volume = Math.max(0, Math.min(1, Math.pow(10, cfg.volumeDb / 20)));
-    a.play().catch((err) => console.warn(`${label} sound failed`, err));
+    playPooled(streamHpDeathSoundUrl(cfg), cfg.volumeDb, "death");
   }
 
   // Heal/Damage liegen in stores.ts, damit Webhooks und die Test-Buttons
@@ -139,13 +154,17 @@
 
   function playLevelSound(level0: number, direction: "up" | "down") {
     const url = soundUrlForLevel(level0, cfg, direction);
-    if (!url) return;
-    const a = new Audio(url);
-    a.volume = Math.max(0, Math.min(1, Math.pow(10, cfg.volumeDb / 20)));
-    a.play().catch((err) => console.warn("audio play failed", err));
+    playPooled(url, cfg.volumeDb, "level");
   }
 
   function moveUp(): boolean {
+    // Aktiver Level-Override: Visible bleibt stehen, Underlying steigt.
+    if (bumpOverrideUnderlying(+1)) {
+      // Sound passend zum Underlying — nicht zum frozen Visible.
+      const ov = $activeLevelOverride;
+      if (ov) playLevelSound(ov.underlyingLevel0, "up");
+      return true;
+    }
     if (state.currentLevel >= 11) return false;
     const newLevel = state.currentLevel + 1;
     const useTimer = cfg.mode === "simple";
@@ -160,6 +179,11 @@
   }
 
   function moveDown(): boolean {
+    if (bumpOverrideUnderlying(-1)) {
+      const ov = $activeLevelOverride;
+      if (ov) playLevelSound(ov.underlyingLevel0, "down");
+      return true;
+    }
     if (state.currentLevel <= 0) return false;
     const newLevel = state.currentLevel - 1;
     const useTimer = cfg.mode === "simple";
@@ -174,6 +198,8 @@
   }
 
   function resetLevel() {
+    // Reset bricht aktiven Override und setzt Visible direkt auf 0.
+    clearOverride();
     const useTimer = cfg.mode === "simple";
     ladderState.update((s) => ({
       ...s,
@@ -262,15 +288,21 @@
 
   // Effekte vom Skill-Fire-Pulse anwenden. Heal/Damage gehen über die
   // bestehenden trigger-Helfer (inkl. Sound + Pulse), Level-Effekte über
-  // die lokalen move-Funktionen (inkl. Level-Sound).
-  function applySkillEffect(eff: SkillEffect) {
+  // die lokalen move-Funktionen (inkl. Level-Sound). Aktive Multiplier
+  // skalieren bewertbare Werte (heal/damage-Beträge); Level-Effekte werden
+  // grundsätzlich nicht multipliziert.
+  function applySkillEffect(eff: SkillEffect, sourceSkillId?: number) {
     switch (eff.kind) {
-      case "heal":
-        triggerHeal(eff.amount);
+      case "heal": {
+        const f = multiplierFactorFor("heal");
+        triggerHeal(Math.round(eff.amount * f));
         break;
-      case "damage":
-        triggerDamage(eff.amount);
+      }
+      case "damage": {
+        const f = multiplierFactorFor("damage");
+        triggerDamage(Math.round(eff.amount * f));
         break;
+      }
       case "levelUp":
         moveUp();
         break;
@@ -280,6 +312,56 @@
       case "levelReset":
         resetLevel();
         break;
+      case "setLevel": {
+        const target1 = Math.max(1, Math.min(12, Math.round(eff.level ?? 1)));
+        const dur = eff.durationSec ?? 0;
+        if (dur > 0) {
+          // Override aktiv: Visible springt, Underlying merken wir uns.
+          setLevelOverride(target1, dur, state.currentLevel, sourceSkillId);
+          const target0 = target1 - 1;
+          ladderState.update((s) => ({ ...s, currentLevel: target0 }));
+          // Optisches Feedback: passender Level-Sound.
+          playLevelSound(target0, target0 >= state.currentLevel ? "up" : "down");
+        } else {
+          // Einmaliger Set ohne Override.
+          clearOverride();
+          const target0 = target1 - 1;
+          const prev = state.currentLevel;
+          ladderState.update((s) => ({ ...s, currentLevel: target0 }));
+          playLevelSound(target0, target0 >= prev ? "up" : "down");
+        }
+        break;
+      }
+      case "multiplier": {
+        const factor = eff.factor ?? 1;
+        const dur = eff.durationSec ?? 0;
+        const kinds = eff.multipliedKinds ?? [];
+        if (factor > 0 && dur > 0 && kinds.length > 0) {
+          registerMultiplier({
+            factor,
+            durationSec: dur,
+            multipliedKinds: kinds,
+            sourceSkillId,
+            label: eff.label,
+          });
+        }
+        break;
+      }
+      case "wheel": {
+        const segs = eff.segments ?? [];
+        if (segs.length === 0) break;
+        const idx = pickWheelSegmentIndex(segs);
+        enqueueWheelSpin({
+          mode: "segments",
+          skillId: sourceSkillId ?? 0,
+          segments: segs,
+          winningIndex: idx,
+        });
+        break;
+      }
+      case "none":
+        // Niete — nichts passiert.
+        break;
     }
   }
   // Subscribe global — feuert für jedes Pulse-Update mit neuer seq.
@@ -287,7 +369,7 @@
   const unsubSkillFire = skillFire.subscribe((fire) => {
     if (!fire || fire.seq === lastSkillFireSeq) return;
     lastSkillFireSeq = fire.seq;
-    for (const eff of fire.effects) applySkillEffect(eff);
+    for (const eff of fire.effects) applySkillEffect(eff, fire.skillId);
   });
 
   // === Aspect Ratio Lock (9:16) ===
@@ -342,6 +424,11 @@
     await setupAspectLock();
 
     window.addEventListener("keydown", onKeyDown);
+    // Audio-Context bei der ersten User-Interaktion „aufwecken"
+    // (Autoplay-Policy von Webviews).
+    const resumeAudio = () => primeAudioContext();
+    window.addEventListener("keydown", resumeAudio, { once: true });
+    window.addEventListener("pointerdown", resumeAudio, { once: true });
   });
 
   onDestroy(() => {
@@ -512,6 +599,23 @@
             wheelSize: Math.max(80, Math.min(800, (w + h) / 2)),
           })),
       });
+      // Buff-Leiste ist auch ein temporäres Element (zeigt nur aktive Buffs).
+      ts.push({
+        id: "buffbar",
+        label: "Buff-Leiste",
+        kind: "wh",
+        getElement: () => buffBarRef?.getElement(),
+        getLayout: () => ({ x: cfg.buffBarX, y: cfg.buffBarY }),
+        move: (x, y) =>
+          settings.update((s) => ({ ...s, buffBarX: x, buffBarY: y })),
+        // Höhe = Pill-Höhe (Breite = dynamisch durch Inhalt).
+        getSize: () => ({ w: cfg.buffBarSize, h: cfg.buffBarSize }),
+        setSize: (w, h) =>
+          settings.update((s) => ({
+            ...s,
+            buffBarSize: Math.max(14, Math.min(120, (w + h) / 2)),
+          })),
+      });
     }
     return ts;
   }
@@ -541,6 +645,13 @@
       bind:this={wheelRef}
       {cfg}
       {editMode}
+      showInEditMode={showTemporaryInEdit}
+    />
+    <BuffBar
+      bind:this={buffBarRef}
+      {cfg}
+      {editMode}
+      {designMode}
       showInEditMode={showTemporaryInEdit}
     />
   {/if}

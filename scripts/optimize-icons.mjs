@@ -24,10 +24,21 @@ if (!fs.existsSync(DIR)) {
   process.exit(1);
 }
 
-const files = fs
-  .readdirSync(DIR)
-  .filter((f) => /^skill_.+\.png$/i.test(f))
-  .map((f) => path.join(DIR, f));
+// Rekursiv durchsuchen: skill_*.png in DIR und allen Unterordnern (Stil-Varianten).
+function collectFiles(dir) {
+  const out = [];
+  for (const name of fs.readdirSync(dir)) {
+    const full = path.join(dir, name);
+    const stat = fs.statSync(full);
+    if (stat.isDirectory()) {
+      out.push(...collectFiles(full));
+    } else if (/^skill_.+\.png$/i.test(name)) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+const files = collectFiles(DIR);
 
 if (files.length === 0) {
   console.log("Keine Icons zum Optimieren gefunden.");

@@ -27,15 +27,38 @@
 
   // Floating "+"-Partikel beim Heilen. Pro Heal-Pulse werden mehrere mit
   // leichten Zufalls-Variationen gespawnt; Anzahl/Größe wachsen mit der Menge.
+  //
+  // Burst-Schutz: harter Cap auf MAX_PARTICLES. Bei Überlauf wird der
+  // älteste Partikel verdrängt — kein unbeschränktes Array, kein
+  // setTimeout pro Spawn (=> keine 1000 GC-Timer bei Webhook-Bursts).
   type Particle = {
     id: number;
     x: number;
     size: number;
     drift: number;
     dur: number;
+    startMs: number;
   };
+  const MAX_PARTICLES = 60;
   let particles: Particle[] = [];
   let nextParticleId = 0;
+  let particleGcHandle: number | null = null;
+
+  function scheduleParticleGc() {
+    if (particleGcHandle !== null || particles.length === 0) return;
+    const tick = () => {
+      const now = performance.now();
+      const before = particles.length;
+      particles = particles.filter((p) => now - p.startMs < p.dur * 1.4 + 100);
+      if (particles.length !== before) particles = particles; // reaktiv
+      if (particles.length > 0) {
+        particleGcHandle = requestAnimationFrame(tick);
+      } else {
+        particleGcHandle = null;
+      }
+    };
+    particleGcHandle = requestAnimationFrame(tick);
+  }
 
   function spawnHealParticles(amount: number) {
     if (!barWidth || !barHeight) return;
@@ -46,30 +69,40 @@
     const baseSize = Math.max(14, barHeight * 0.75);
     const sizeBoost = Math.min(1.8, 1 + ratio * 1.6);
     const dur = 900 + Math.min(600, ratio * 800);
-    const ids: number[] = [];
+    const now = performance.now();
     const fresh: Particle[] = [];
     for (let i = 0; i < count; i++) {
-      const id = ++nextParticleId;
-      ids.push(id);
       fresh.push({
-        id,
+        id: ++nextParticleId,
         x: Math.random() * barWidth,
         size: baseSize * sizeBoost * (0.85 + Math.random() * 0.3),
         drift: (Math.random() - 0.5) * 30 * autoScale,
         dur: dur * (0.85 + Math.random() * 0.3),
+        startMs: now,
       });
     }
-    particles = [...particles, ...fresh];
-    setTimeout(() => {
-      particles = particles.filter((p) => !ids.includes(p.id));
-    }, dur * 1.4 + 100);
+    let next = particles.concat(fresh);
+    if (next.length > MAX_PARTICLES) {
+      next = next.slice(next.length - MAX_PARTICLES);
+    }
+    particles = next;
+    scheduleParticleGc();
   }
+
+  // Damage-FX: max. eine laufende Schüttel/Flash-Animation gleichzeitig.
+  // Bursts collapsen — keine 200 parallel laufenden WAAPI-Animations, die
+  // sich gegenseitig zerstückeln.
+  let damageFlashAnim: Animation | null = null;
+  let damageShakeAnim: Animation | null = null;
 
   function triggerDamageFx(amount: number) {
     const ratio = Math.min(1, amount / Math.max(1, cfg.streamHpMax));
     const intensity = Math.min(1, 0.45 + ratio * 3.5);
     if (flashEl?.animate) {
-      flashEl.animate(
+      if (damageFlashAnim) {
+        try { damageFlashAnim.cancel(); } catch { /* ignore */ }
+      }
+      damageFlashAnim = flashEl.animate(
         [
           { opacity: intensity, background: `rgba(255, 40, 40, ${intensity})` },
           { opacity: intensity * 0.6, background: `rgba(255, 60, 60, ${intensity * 0.6})`, offset: 0.3 },
@@ -77,10 +110,14 @@
         ],
         { duration: 480, easing: "ease-out" },
       );
+      damageFlashAnim.onfinish = () => { damageFlashAnim = null; };
     }
     if (innerEl?.animate) {
       const mag = Math.min(8, 3 + ratio * 12) * autoScale;
-      innerEl.animate(
+      if (damageShakeAnim) {
+        try { damageShakeAnim.cancel(); } catch { /* ignore */ }
+      }
+      damageShakeAnim = innerEl.animate(
         [
           { transform: "translateX(0)" },
           { transform: `translateX(${-mag}px)` },
@@ -91,10 +128,12 @@
         ],
         { duration: 280, easing: "ease-out" },
       );
+      damageShakeAnim.onfinish = () => { damageShakeAnim = null; };
     }
   }
 
-  // Pulse-Subscription: ignoriert den initialen null-Wert.
+  // Pulse-Subscription: ignoriert den initialen null-Wert. Pulses kommen
+  // schon vor-aggregiert (max. 1 pro Kind pro Frame, siehe stores.ts).
   const unsubPulse = hpPulse.subscribe((p) => {
     if (!p) return;
     if (p.kind === "heal") spawnHealParticles(p.amount);
@@ -108,6 +147,12 @@
   onDestroy(() => {
     window.removeEventListener("resize", updateSize);
     unsubPulse();
+    if (particleGcHandle !== null) {
+      cancelAnimationFrame(particleGcHandle);
+      particleGcHandle = null;
+    }
+    try { damageFlashAnim?.cancel(); } catch { /* ignore */ }
+    try { damageShakeAnim?.cancel(); } catch { /* ignore */ }
   });
 
   $: autoScale = windowWidth / REFERENCE_WIDTH;

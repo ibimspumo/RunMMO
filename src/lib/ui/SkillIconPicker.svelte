@@ -4,15 +4,18 @@
   import {
     SKILL_CATALOG,
     SKILL_CATEGORIES,
-    SKILL_ICON_URLS,
+    iconUrlsForStyle,
     findIconEntry,
     resolveDefaultIcon,
   } from "../skill-icons";
-  import type { SkillIconCategory } from "../skill-icons";
+  import type { SkillIconCategory, IconStyle } from "../skill-icons";
   import { convertFileSrc } from "@tauri-apps/api/core";
 
   // value-Format: null = kein Icon | "default:<key>" = gebündelt | sonstige = User-Pfad
   export let value: string | null = null;
+  // Welcher Icon-Stil wird im Grid angezeigt? Wird vom Aufrufer aus den
+  // App-Settings durchgereicht — die Vorschau matcht dann die Live-Anzeige.
+  export let style: IconStyle = "painterly";
 
   const dispatch = createEventDispatcher<{ change: string | null }>();
 
@@ -20,11 +23,14 @@
   let activeCategory: SkillIconCategory | "all" = "all";
   let query = "";
 
+  // Aktuell verfügbare Icon-URLs für den ausgewählten Stil (für das Grid).
+  $: gridUrls = iconUrlsForStyle(style);
+
   // Aktuell ausgewähltes Icon: URL + Label für die Vorschau
   $: currentEntry = value && value.startsWith("default:") ? findIconEntry(value.slice("default:".length)) : null;
   $: currentUrl = (() => {
     if (!value) return null;
-    if (value.startsWith("default:")) return resolveDefaultIcon(value);
+    if (value.startsWith("default:")) return resolveDefaultIcon(value, style);
     return convertFileSrc(value);
   })();
   $: currentLabel = (() => {
@@ -148,7 +154,7 @@
 
       <div class="grid">
         {#each filtered as entry (entry.key)}
-          {@const url = SKILL_ICON_URLS[entry.key]}
+          {@const url = gridUrls[entry.key]}
           {@const selected = value === `default:${entry.key}`}
           <button
             class="grid-item"

@@ -39,6 +39,13 @@ export interface AppSettings {
   webhookPort: number;
   webhookEnabled: boolean;
   webhookBindAllInterfaces: boolean;
+  // Verarbeitung eingehender Effekt-Webhooks (gift/heal/damage/skill):
+  //  - "immediate": Effekt + HP-Update + Sound + Animation sofort beim Eintreffen
+  //  - "queued":    Events in FIFO, einer pro `webhookQueueIntervalMs` raus
+  // up/down/reset/status laufen IMMER sofort, unabhängig davon.
+  webhookProcessingMode: "immediate" | "queued";
+  // Nur relevant im queued-Modus: Mindest-Abstand zwischen zwei Pops.
+  webhookQueueIntervalMs: number;
 
   // Balken-Farben (12)
   levelColors: RGBA[];
@@ -129,6 +136,11 @@ export interface AppSettings {
   //  - "clean":  Nur Icon + Texte, keine Kästen/Hintergründe (transparent)
   skillBarStyle: "framed" | "clean";
 
+  // Globaler Stil der Default-Skill-Icons:
+  //  - "painterly": MMORPG-Painterly (Original, vibrant cel-shaded)
+  //  - "fluent":    Microsoft Fluent 3D Emoji (soft matte, friendly)
+  iconStyle: "painterly" | "fluent";
+
   // Glücksrad (Overlay-Element). Wird nur sichtbar, wenn gerade gedreht wird,
   // oder im Edit-Modus mit "Temporäre Elemente"-Toggle.
   wheelX: number;
@@ -143,6 +155,22 @@ export interface AppSettings {
   skillValueText: SkillTextStyle;
   skillChanceText: SkillTextStyle;
   skillMiniWheelEnabled: boolean;
+
+  // Globaler Style für das Gift-Overlay (Bildpfad pro Skill in Skill.giftIconPath).
+  skillGiftStyle: SkillGiftStyle;
+
+  // ===== Buff-Leiste =====
+  // Zeigt aktive temporäre Status-Effekte als Pills/Badges (Multiplikator-
+  // Timer + temporärer Level-Override). Nur sichtbar, wenn mindestens ein
+  // Effekt aktiv ist, oder im Edit-Modus mit "Temp"-Toggle.
+  buffBarX: number;
+  buffBarY: number;
+  buffBarSize: number;       // Pill-Höhe in 450-Referenzraum-px
+  buffBarGap: number;        // Abstand zwischen Pills
+  buffBarBgColor: RGBA;      // Hintergrund der Pill
+  buffBarTextColor: RGBA;    // Schriftfarbe
+  buffBarBorderColor: RGBA;  // Pill-Rand
+  buffBarShowIcon: boolean;  // ✕/↑ Mini-Icon links anzeigen
 }
 
 // Eine Bedingungs-Gruppe (UND-verknüpft innerhalb). Felder mit null werden
@@ -159,12 +187,52 @@ export type SkillEffectKind =
   | "damage"
   | "levelUp"
   | "levelDown"
-  | "levelReset";
+  | "levelReset"
+  | "setLevel"
+  | "multiplier"
+  | "wheel"
+  | "none";
 
-// Heal/Damage nutzen amount; levelUp/Down/Reset ignorieren ihn.
+// Ein Effekt im Skill-Baukasten. Alle Felder sind immer vorhanden (auch wenn
+// sie für das jeweilige `kind` keine Bedeutung haben) — vereinfacht die
+// UI-Bindung und das JSON-Schema, kostet ein paar Bytes pro Effekt.
+//  - heal/damage:        amount = HP-Wert (durch Multiplier skalierbar)
+//  - levelUp/Down/Reset: alle weiteren Felder werden ignoriert
+//  - setLevel:           level (1..12) + durationSec (0 = einmalig)
+//  - multiplier:         factor + durationSec + multipliedKinds (welche Kinds
+//                        sollen durch diesen Buff multipliziert werden)
+//  - wheel:              segments[] — eine eigene Glücksrad-Drehung mit Sektoren
+//                        je eigener Wahrscheinlichkeit + eigenen Folge-Effekten
+//  - none:               Niete (keine Wirkung) — primär als Wheel-Segment nutzbar
 export interface SkillEffect {
   kind: SkillEffectKind;
+
+  // heal/damage
   amount: number;
+
+  // setLevel
+  level: number;          // 1..12
+  durationSec: number;    // 0 = einmalig (kein Override-Timer)
+
+  // multiplier
+  factor: number;         // z.B. 2 = doppelte Werte
+  multipliedKinds: SkillEffectKind[]; // welche Kinds dieser Buff anfasst
+
+  // wheel
+  segments: WheelSegment[];
+  // Optionales Label (z.B. an Niete oder zur Anzeige im Skill-Slot)
+  label: string;
+}
+
+// Ein Sektor des Glücksrads als Action. Wahrscheinlichkeiten werden vom System
+// auf 100% normiert — d.h. ein Sektor mit weight=2 ist doppelt so wahrschein-
+// lich wie einer mit weight=1. Wenn das Segment fällt, werden seine effects
+// ausgeführt (kann auch leer / "none" sein für Niete).
+export interface WheelSegment {
+  label: string;       // sichtbarer Text im Sektor (kurz)
+  color: RGBA;         // Sektor-Farbe
+  weight: number;      // > 0
+  effects: SkillEffect[];
 }
 
 // Globaler Text-Stil für die zwei festen Text-Elemente auf jedem Skill-Slot
@@ -184,6 +252,21 @@ export interface SkillTextStyle {
   offsetY: number;
 }
 
+// Globaler Stil für das optionale TikTok-Gift-Overlay auf jedem Skill-Slot.
+// Pro Skill steckt der Bildpfad in `giftIconPath`; hier sind nur die globalen
+// Anzeige-Parameter (Größe als Slot-Bruch, Position, Deckkraft, Schatten).
+export interface SkillGiftStyle {
+  enabled: boolean;
+  // Größe als Bruch der Slot-Höhe (0.1..1.5). 0.4 = 40% Slot-Höhe.
+  sizeFrac: number;
+  // Position als Bruch (0..1) im Slot. 0.5 = Mitte. >1 = außerhalb.
+  offsetX: number;
+  offsetY: number;
+  opacity: number;       // 0..1
+  shadowSize: number;    // 0..16 px drop-shadow blur (0 = aus)
+  shadowColor: RGBA;
+}
+
 // Erste passende Rule feuert (Reihenfolge in `rules` = Priorität).
 export interface SkillRule {
   // Leer = immer aktiv. Sonst: mindestens eine Gruppe muss erfüllt sein.
@@ -196,6 +279,12 @@ export interface Skill {
   id: number;             // = ?id= im Webhook /skill?id=N (eindeutig)
   name: string;
   iconPath: string | null;
+  // Optionales TikTok-Gift-Bild für den Slot, damit Zuschauer sehen, welches
+  // Geschenk diesen Skill triggert. Format wie iconPath:
+  //  - null            → kein Overlay
+  //  - "gift:<key>"    → Eintrag aus der TikTok-Gift-Bibliothek
+  //  - sonst           → User-Pfad (eigenes Bild)
+  giftIconPath: string | null;
   rules: SkillRule[];
   cooldownSec: number;
 }

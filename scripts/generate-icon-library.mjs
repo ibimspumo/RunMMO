@@ -3,9 +3,10 @@
 // alle fehlenden Icons. Existierende Dateien werden übersprungen.
 //
 // Nutzung:
-//   node scripts/generate-icon-library.mjs               → alle fehlenden
-//   node scripts/generate-icon-library.mjs --force       → alle, auch existierende
-//   node scripts/generate-icon-library.mjs --only heal,damage   → nur Kategorien
+//   node scripts/generate-icon-library.mjs                    → painterly (Default), alle fehlenden
+//   node scripts/generate-icon-library.mjs --style fluent     → in Unterordner skills/fluent/
+//   node scripts/generate-icon-library.mjs --force            → alle, auch existierende
+//   node scripts/generate-icon-library.mjs --only heal,damage → nur Kategorien
 //
 // Parallelität: CONCURRENCY (default 4).
 
@@ -16,8 +17,16 @@ import { CATALOG, buildPrompt } from "./icon-catalog.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
-const OUTPUT_DIR = path.join(ROOT, "src/assets/defaults/graphics/skills");
 const CONCURRENCY = parseInt(process.env.CONCURRENCY || "4", 10);
+
+const args = process.argv.slice(2);
+const styleIdx = args.indexOf("--style");
+const STYLE = styleIdx >= 0 ? args[styleIdx + 1] : "painterly";
+// Painterly = Default → Wurzel-Ordner. Andere Stile → Unterordner.
+const OUTPUT_DIR =
+  STYLE === "painterly"
+    ? path.join(ROOT, "src/assets/defaults/graphics/skills")
+    : path.join(ROOT, `src/assets/defaults/graphics/skills/${STYLE}`);
 
 function loadEnv() {
   const p = path.join(ROOT, ".env");
@@ -37,7 +46,6 @@ if (!KEY) {
   process.exit(1);
 }
 
-const args = process.argv.slice(2);
 const FORCE = args.includes("--force");
 const onlyIdx = args.indexOf("--only");
 const ONLY_CATS = onlyIdx >= 0 ? args[onlyIdx + 1].split(",") : null;
@@ -52,6 +60,7 @@ const todo = CATALOG.filter((e) => {
 });
 
 console.log(`Katalog: ${CATALOG.length} Icons gesamt`);
+console.log(`Style: ${STYLE} → ${OUTPUT_DIR}`);
 console.log(`Zu generieren: ${todo.length} (Concurrency=${CONCURRENCY})`);
 if (todo.length === 0) {
   console.log("Nichts zu tun.");
@@ -60,7 +69,7 @@ if (todo.length === 0) {
 
 async function generateOne(entry) {
   const outPath = path.join(OUTPUT_DIR, `skill_${entry.key}.png`);
-  const prompt = buildPrompt(entry);
+  const prompt = buildPrompt(entry, STYLE);
 
   const body = {
     model: process.env.IMAGE_MODEL || "openai/gpt-5-image",

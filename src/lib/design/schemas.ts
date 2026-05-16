@@ -235,6 +235,73 @@ export const SCHEMAS: Record<string, DesignSchema> = {
       { kind: "number", key: "skillValueText.shadowSize", label: "Blur", min: 0, max: 16, step: 0.5, suffix: "px" },
     ],
   },
+  "skill.gift": {
+    id: "skill.gift",
+    label: "Skill · Gift-Overlay",
+    fields: [
+      { kind: "toggle", key: "skillGiftStyle.enabled", label: "Anzeigen" },
+
+      { kind: "group", label: "Größe & Position" },
+      {
+        kind: "number",
+        key: "skillGiftStyle.sizeFrac",
+        label: "Größe",
+        min: 0.1,
+        max: 1.5,
+        step: 0.05,
+        hint: "Anteil der Slot-Höhe (0.4 = 40%).",
+      },
+      {
+        kind: "number",
+        key: "skillGiftStyle.offsetX",
+        label: "X im Slot",
+        min: -0.5,
+        max: 1.5,
+        step: 0.05,
+      },
+      {
+        kind: "number",
+        key: "skillGiftStyle.offsetY",
+        label: "Y im Slot",
+        min: -0.5,
+        max: 1.5,
+        step: 0.05,
+      },
+
+      { kind: "group", label: "Optik" },
+      {
+        kind: "number",
+        key: "skillGiftStyle.opacity",
+        label: "Deckkraft",
+        min: 0,
+        max: 1,
+        step: 0.05,
+      },
+      {
+        kind: "number",
+        key: "skillGiftStyle.shadowSize",
+        label: "Schatten-Blur",
+        min: 0,
+        max: 16,
+        step: 0.5,
+        suffix: "px",
+      },
+      { kind: "color", key: "skillGiftStyle.shadowColor", label: "Schatten-Farbe" },
+    ],
+  },
+  "buffbar.pill": {
+    id: "buffbar.pill",
+    label: "Buff-Leiste · Pill",
+    fields: [
+      { kind: "number", key: "buffBarSize", label: "Pill-Höhe", min: 14, max: 120, suffix: "px" },
+      { kind: "number", key: "buffBarGap", label: "Abstand zwischen Pills", min: 0, max: 40, suffix: "px" },
+      { kind: "color", key: "buffBarBgColor", label: "Hintergrund" },
+      { kind: "color", key: "buffBarBorderColor", label: "Rand" },
+      { kind: "color", key: "buffBarTextColor", label: "Textfarbe", withAlpha: false },
+      { kind: "toggle", key: "buffBarShowIcon", label: "Mini-Icon anzeigen" },
+    ],
+  },
+
   "skill.chanceText": {
     id: "skill.chanceText",
     label: "Skill · Chance-Pille",
