@@ -6,6 +6,9 @@
 
   export let cfg: AppSettings;
   export let state: LadderState;
+  // Design-Modus: setzt data-design-target an die Sub-Bereiche, damit das
+  // Design-Overlay sie findet und Hit-Boxen rendern kann.
+  export let designMode: boolean = false;
 
   // DOM-Refs für Editor-Bbox + Effekt-Animationen.
   let innerEl: HTMLDivElement;
@@ -170,6 +173,7 @@
 >
   <div
     class="hp-track"
+    data-design-target={designMode ? "hp.bar" : null}
     style="
       height: {barHeight}px;
       background: {rgbaToCss(cfg.streamHpBgColor)};
@@ -198,7 +202,12 @@
           font-size: {textPx}px;
         "
       >
-        {hpText}
+        <span
+          class="hp-text-inner"
+          data-design-target={designMode ? "hp.text" : null}
+        >
+          {hpText}
+        </span>
       </span>
     {/if}
   </div>
@@ -232,7 +241,12 @@
         font-size: {decayPx}px;
       "
     >
-      {decayText}
+      <span
+        class="decay-text-inner"
+        data-design-target={designMode ? "hp.text" : null}
+      >
+        {decayText}
+      </span>
     </span>
   {/if}
 </div>
@@ -282,6 +296,11 @@
       0 0 4px rgba(0, 0, 0, 0.5);
     -webkit-text-stroke: 1px rgba(0, 0, 0, 0.85);
     user-select: none;
+  }
+  /* Inner span = exakte Text-Bbox. So bekommt der Design-Modus nur die
+     tatsächliche Text-Größe als Hit-Zone, nicht den ganzen Balken. */
+  .hp-text-inner {
+    display: inline-block;
   }
   .heal-particles {
     position: absolute;
@@ -338,5 +357,8 @@
       0 0 3px rgba(0, 0, 0, 0.5);
     -webkit-text-stroke: 1px rgba(0, 0, 0, 0.75);
     user-select: none;
+  }
+  .decay-text-inner {
+    display: inline-block;
   }
 </style>

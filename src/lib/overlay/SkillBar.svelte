@@ -18,6 +18,7 @@
   export let cfg: AppSettings;
   export let state: LadderState;
   export let editMode = false;
+  export let designMode = false;
 
   let rootEl: HTMLDivElement;
   export function getElement(): HTMLDivElement | undefined {
@@ -113,10 +114,17 @@
     }
   }
 
-  function textStyleCss(style: SkillTextStyle, scale: number): string {
-    const fontPx = Math.max(8, style.fontSize * scale);
-    const outlinePx = Math.max(0, style.outlineSize * scale);
-    const shadowPx = Math.max(0, style.shadowSize * scale);
+  // Text skaliert mit der Slot-Größe (nicht nur mit der Window-Breite). 64px
+  // ist die kanonische Default-Slot-Größe — bei dieser Größe gilt
+  // style.fontSize 1:1, bei 128px werden Text/Outline/Shadow doppelt so groß.
+  // Damit bleibt das Verhältnis Icon ↔ Text konstant, wenn man im Edit-Modus
+  // skaliert.
+  const SLOT_REF_SIZE = 64;
+  function textStyleCss(style: SkillTextStyle, slotPx: number): string {
+    const slotScale = slotPx / SLOT_REF_SIZE;
+    const fontPx = Math.max(8, style.fontSize * slotScale);
+    const outlinePx = Math.max(0, style.outlineSize * slotScale);
+    const shadowPx = Math.max(0, style.shadowSize * slotScale);
     const shadow =
       shadowPx > 0
         ? `0 0 ${shadowPx}px ${rgbaToCss(style.shadowColor)},
@@ -145,7 +153,7 @@
 <div
   class="skill-bar"
   bind:this={rootEl}
-  data-tauri-drag-region={editMode ? null : true}
+  data-tauri-drag-region={editMode || designMode ? null : true}
   style="
     left: {leftPx}px;
     top: {topPx}px;
@@ -167,6 +175,7 @@
       class:on-cooldown={info.cooldownLeftMs > 0}
       class:framed={cfg.skillBarStyle !== "clean"}
       class:clean={cfg.skillBarStyle === "clean"}
+      data-design-target={designMode ? "skill.slot" : null}
       style="width: {slotPx}px; height: {slotPx}px;"
       title={skill.name}
     >
@@ -206,8 +215,9 @@
       {#if cfg.skillValueText.enabled && valueTxt}
         <span
           class="slot-text value-text"
+          data-design-target={designMode ? "skill.valueText" : null}
           style="
-            {textStyleCss(cfg.skillValueText, autoScale)}
+            {textStyleCss(cfg.skillValueText, slotPx)}
             {textPositionCss(cfg.skillValueText, slotPx)}
           "
         >
@@ -220,8 +230,9 @@
         <div
           class="slot-text chance-pill"
           class:cleanChance={cfg.skillBarStyle === "clean"}
+          data-design-target={designMode ? "skill.chanceText" : null}
           style="
-            {textStyleCss(cfg.skillChanceText, autoScale)}
+            {textStyleCss(cfg.skillChanceText, slotPx)}
             {textPositionCss(cfg.skillChanceText, slotPx)}
           "
         >

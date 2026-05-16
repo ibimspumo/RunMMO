@@ -40,6 +40,9 @@ src/                       Svelte-Frontend
     version.ts             APP_VERSION (manuell bei Release hochsetzen!)
     overlay/               Ladder.svelte, LevelBar.svelte, Tacho.svelte, HpBar.svelte
     editor/                Editor.svelte — Edit-Modus (Taste "E"), Drag/Resize/Center
+    design/                Design.svelte + DesignPanel.svelte + schemas.ts +
+                           fields/ — Design-Modus (Taste "D"), Style-Felder
+                           pro Sub-Target im Overlay
     settings/              Settings.svelte + sections/*.svelte
     ui/                    Design-System: tokens.css + Atom-Komponenten
                            (Button, Card, Field, FilePicker, …)
@@ -65,7 +68,10 @@ src-tauri/
 Wenn du ein neues Settings-Feld hinzufügst:
 1. In `types.ts` ergänzen
 2. In `defaults.ts` Default setzen (für Migration alter Configs)
-3. Section-Component erweitern oder neue erstellen
+3. **Klassifizieren — die Drei-Modi-Regel (siehe unten)**:
+   - **Inhalt/Technik** → in eine Settings-Section (`src/lib/settings/sections/*.svelte`)
+   - **Position/Größe** → in den **Edit-Modus** (`buildEditTargets` in `App.svelte`)
+   - **Visueller Stil** → in den **Design-Modus** (Schema in `src/lib/design/schemas.ts`)
 4. Falls Backend-relevant: an `apply_settings` weitergeben
 
 ## Modi
@@ -121,28 +127,63 @@ Default-Port: 8080. `webhookBindAllInterfaces=true` → 0.0.0.0, sonst nur local
 - **Auto-Skalierung**: Inhalt skaliert proportional mit Fensterbreite (Referenz 450px). Pro-Element-Skalierung über die jeweiligen `*Scale`-Felder im Settings-Modell (vom Edit-Modus verwaltet).
 - **Transparenz**: `transparent: true` + `decorations: false` für OBS Window-Capture
 
-## Edit-Modus (Pflicht für neue Overlay-Elemente)
+## Die Drei-Modi-Regel (sehr wichtig)
 
-Taste **E** öffnet einen Photoshop-artigen Edit-Modus im Overlay (siehe `src/lib/editor/Editor.svelte`).
-Position und Skalierung jedes Overlay-Elements werden dort per Drag, Resize-Handles und
-Center-Buttons gesetzt — **niemals** über eigene Number-Inputs in den Settings.
+RunMMO trennt Overlay-Einstellungen strikt nach Verantwortlichkeit. **Jeder neue
+Setting/Token gehört in genau einen dieser drei Orte** — niemals doppelt pflegen,
+und niemals Stil/Position in den Settings-Sections als Number-Input.
 
-**Wenn du ein neues Overlay-Element hinzufügst, MUSS es Edit-Modus-kompatibel sein:**
+| Modus | Taste | Datei(en) | Verantwortlich für |
+|-------|-------|-----------|--------------------|
+| **Settings** | ESC | `src/lib/settings/sections/*.svelte` | Inhalt & Technik (Webhook-Port, Modus, Level-Assets, Sounds, Spielmechanik-Werte, **Inhalts-Farben** wie `levelColors`) |
+| **Edit-Modus** | E | `src/lib/editor/Editor.svelte` + `buildEditTargets()` in `App.svelte` | Position & Größe per Drag/Resize (`<name>X/Y/Scale`, `<name>Width/Height`) |
+| **Design-Modus** | D | `src/lib/design/Design.svelte` + Schema in `src/lib/design/schemas.ts` | Visueller Stil: Farben, Border-Radius, Schatten, Outline, Padding, Schriftgrößen, alles Dekorative |
 
-1. Neue Settings-Felder hinzufügen — Konvention (Referenz-450px-Raum):
-   - Uniform skalierbar: `<name>X`, `<name>Y`, `<name>Scale`
-   - Frei skalierbar (W/H unabhängig): `<name>X`, `<name>Y`, `<name>Width`, `<name>Height`
-   Defaults in `defaults.ts` setzen. Werte werden bei Auto-Skalierung mit `windowWidth/450` multipliziert.
-2. Die Komponente muss:
-   - Eine `editMode: boolean` Prop akzeptieren und `data-tauri-drag-region={editMode ? null : true}` setzen
+Edit- und Design-Modus sind **mutex** und ausschließlich am Overlay (kein UI-Panel).
+Beide ändern den Store live und persistieren beim Verlassen (`saveSettings` in
+`exitEditMode` / `exitDesignMode`).
+
+### Pflichten bei neuem Overlay-Element
+
+1. **Settings-Felder anlegen** (in `types.ts` + `defaults.ts`):
+   - Position/Größe: `<name>X`, `<name>Y`, `<name>Scale` (uniform) oder `<name>Width/Height` (wh).
+     Werte im Referenz-450px-Raum, werden mit `windowWidth/450` skaliert.
+   - Stil: ganz normale Felder am `AppSettings`-Root oder als verschachteltes Objekt
+     (Schemas können Punkt-Pfade wie `mySection.color`).
+   - Inhalt: ganz normale Felder.
+
+2. **Komponente bauen**:
+   - Props `editMode: boolean` UND `designMode: boolean`.
+   - `data-tauri-drag-region={editMode || designMode ? null : true}` auf der äußeren Hülle
      (sonst zieht der User das Fenster statt das Element).
-   - Eine `getElement()`-Funktion exportieren, die das outer DOM-Element zurückgibt (für Bbox-Messung).
-3. In `App.svelte`:
-   - Komponente mit `bind:this={...Ref}` rendern und `editMode` weiterreichen.
-   - `buildEditTargets()` einen neuen Eintrag liefern lassen (`kind: "uniform"` oder `kind: "wh"`,
-     entsprechende `move`/`setScale`/`setSize` Setter über `settings.update(...)`).
-4. **Keine** Number-Inputs für Position/Größe in den Settings-Sections. Maximal einen
-   `Callout` mit Hinweis auf den Edit-Modus, falls passend.
+   - `getElement()` exportieren, das das outer DOM-Element zurückgibt (für Editor-Bbox).
+   - Pro klickbarem Sub-Bereich (Bar, Text, …) ein `data-design-target={designMode ? "<schemaId>" : null}`.
+   - Text-Elemente, deren Bbox sonst den ganzen Container füllt (z.B. flex-centered Spans
+     mit `inset: 0`), in einen inneren `<span class="*-inner">` mit `display: inline-block`
+     wrappen und `data-design-target` auf den inneren Span setzen — sonst überdeckt die
+     Text-Hit-Box den Balken.
+
+3. **In `App.svelte`**:
+   - Komponente mit `bind:this={...Ref}` rendern, `{editMode}` UND `{designMode}` weiterreichen.
+   - `buildEditTargets()` einen neuen Eintrag liefern lassen (`kind: "uniform"` oder `kind: "wh"`).
+
+4. **In `src/lib/design/schemas.ts`**:
+   - Pro Sub-Target ein `DesignSchema` mit `id` (= dein `data-design-target`-Wert),
+     `label` (Panel-Header) und `fields: FieldDef[]`. Field-Kinds: `color`, `number`,
+     `toggle`, `select`, `group` (visueller Divider, kein Wert).
+   - Wenn ein Toggle den ganzen Sub-Bereich versteckt (z.B. `streamHpShowNumbers`),
+     gehört der Toggle ins **Container-Schema** (`hp.bar`), nicht ins versteckte
+     Schema (`hp.text`) — sonst kann der User es nicht mehr einschalten.
+
+5. **Settings-Section bleibt schlank**: nur Inhalt/Technik. Falls Style-Felder
+   früher dort waren → entfernen, durch `<Callout variant="info">` ersetzen mit
+   Hinweis auf Edit-/Design-Modus.
+
+### Pflichten bei neuem Design-Token an bestehendem Element
+
+- **Nicht** in eine Settings-Section. In das passende `DesignSchema` einreihen
+  (`src/lib/design/schemas.ts`). Falls noch kein passendes Sub-Target existiert,
+  ein neues anlegen und am DOM mit `data-design-target` markieren.
 
 ## Bekannte Stolperfallen
 
@@ -150,6 +191,7 @@ Center-Buttons gesetzt — **niemals** über eigene Number-Inputs in den Setting
 - **Asset-Pfade vom User-Dialog**: `convertFileSrc()` braucht den `assetProtocol` in `tauri.conf.json` und `fs:scope-*-recursive` für die Pfade.
 - **CSS transform + drag region**: funktioniert, weil hit-testing transformierte Geometrie respektiert.
 - **Tauri-Updater `dialog: false`**: wir nutzen Custom-UI in `UpdateSection.svelte`, nicht den Standard-Dialog.
+- **Design-Hit-Boxen bei zentrierten Texten**: `inset: 0` + flex-Centering macht die Text-Bbox so groß wie der Container. Inner-Span mit `display: inline-block` als Hit-Target verwenden (siehe `hp-text-inner`/`level-text-inner` als Vorbild).
 
 ## Befehle (häufig genutzt)
 
@@ -178,3 +220,5 @@ cd src-tauri && cargo build                    # Rust-Build only
 - IPC-Commands: `src-tauri/src/commands.rs`
 - Update-UI: `src/lib/settings/sections/UpdateSection.svelte`
 - Permissions: `src-tauri/capabilities/default.json`
+- Edit-Modus (Position): `src/lib/editor/Editor.svelte` + `buildEditTargets` in `App.svelte`
+- Design-Modus (Stil): `src/lib/design/` (Design.svelte, DesignPanel.svelte, schemas.ts, fields/)

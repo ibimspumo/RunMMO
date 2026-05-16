@@ -5,7 +5,6 @@
   import {
     Callout,
     Card,
-    ColorField,
     Field,
     FilePicker,
     NumberInput,
@@ -131,42 +130,13 @@
   </Callout>
 </Card>
 
-<Card title="Aussehen">
-  <Field
-    label="Eckenradius (px)"
-    hint="0 = eckig, hoch = Pille. Wird automatisch auf die halbe Höhe begrenzt."
-  >
-    <NumberInput
-      bind:value={cfg.streamHpBorderRadius}
-      min={0}
-      max={120}
-      suffix="px"
-    />
-  </Field>
-
-  <Field>
-    <Toggle bind:checked={cfg.streamHpShowNumbers} label="HP-Zahlen anzeigen" />
-  </Field>
-
+<Card title="Aussehen & Position">
   <Callout variant="info">
-    Position und Größe der HP-Leiste werden im <strong>Edit-Modus</strong>
-    (Taste <code>E</code>) direkt im Overlay eingestellt.
+    Position und Größe der HP-Leiste stellst du im <strong>Edit-Modus</strong>
+    (Taste <code>E</code>) ein. Eckenradius, Farben, HP-Zahl-Toggle und Text-Farbe
+    findest du im <strong>Design-Modus</strong> (Taste <code>D</code>) — dort
+    klickst du direkt auf den Balken oder den HP-Text.
   </Callout>
-</Card>
-
-<Card title="Farben">
-  <Field label="Füllung" inline>
-    <ColorField bind:value={cfg.streamHpFillColor} withAlpha={false} />
-  </Field>
-  <Field label="Hintergrund" inline>
-    <ColorField bind:value={cfg.streamHpBgColor} />
-  </Field>
-  <Field label="Rand" inline>
-    <ColorField bind:value={cfg.streamHpBorderColor} />
-  </Field>
-  <Field label="HP-Text" inline>
-    <ColorField bind:value={cfg.streamHpTextColor} withAlpha={false} />
-  </Field>
 </Card>
 
 <style>

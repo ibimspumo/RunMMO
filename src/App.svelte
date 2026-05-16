@@ -11,6 +11,7 @@
   import LuckyWheel from "./lib/overlay/LuckyWheel.svelte";
   import Settings from "./lib/settings/Settings.svelte";
   import Editor, { type EditTarget } from "./lib/editor/Editor.svelte";
+  import Design from "./lib/design/Design.svelte";
 
   import type { AppSettings, LadderState, SkillEffect } from "./lib/types";
   import { defaultSettings } from "./lib/defaults";
@@ -33,6 +34,7 @@
   let state: LadderState = { currentLevel: 0, timeLeft: 0, isRunning: false, hp: 100 };
   let panelOpen = false;
   let editMode = false;
+  let designMode = false;
   let deathSoundFired = false;
 
   // Refs auf die Overlay-Komponenten (für Editor-Bbox-Messung).
@@ -202,7 +204,7 @@
 
   function printHelp() {
     console.log(
-      "Steuerung:\n  W/↑: Level hoch\n  S/↓: Level runter\n  R: Reset\n  T: Timer start/stop\n  P: +100 HP (Heal-Test)\n  M: −100 HP (Damage-Test)\n  H: Hilfe\n  E: Edit-Modus\n  ESC: Einstellungen",
+      "Steuerung:\n  W/↑: Level hoch\n  S/↓: Level runter\n  R: Reset\n  T: Timer start/stop\n  P: +100 HP (Heal-Test)\n  M: −100 HP (Damage-Test)\n  H: Hilfe\n  E: Edit-Modus (Position/Skalierung)\n  D: Design-Modus (Stil)\n  ESC: Einstellungen",
     );
   }
 
@@ -353,25 +355,34 @@
   });
 
   function onKeyDown(e: KeyboardEvent) {
-    // ESC: schließt vorrangig den Edit-Modus, sonst togglet Settings.
+    // ESC: schließt vorrangig Edit- oder Design-Modus, sonst togglet Settings.
     if (e.key === "Escape") {
       if (editMode) {
         exitEditMode();
+      } else if (designMode) {
+        exitDesignMode();
       } else {
         settingsOpen.update((v) => !v);
       }
       e.preventDefault();
       return;
     }
-    // "E" togglet Edit-Modus (nur wenn Settings zu).
-    if (!panelOpen && (e.key === "e" || e.key === "E")) {
+    // "E" togglet Edit-Modus (nur wenn Settings zu, und Design nicht offen).
+    if (!panelOpen && !designMode && (e.key === "e" || e.key === "E")) {
       if (editMode) exitEditMode();
       else enterEditMode();
       e.preventDefault();
       return;
     }
-    // Andere Shortcuts nur wenn Settings & Editor nicht offen.
-    if (panelOpen || editMode) return;
+    // "D" togglet Design-Modus (nur wenn Settings zu, und Edit nicht offen).
+    if (!panelOpen && !editMode && (e.key === "d" || e.key === "D")) {
+      if (designMode) exitDesignMode();
+      else enterDesignMode();
+      e.preventDefault();
+      return;
+    }
+    // Andere Shortcuts nur wenn Settings & Editor & Design nicht offen.
+    if (panelOpen || editMode || designMode) return;
     switch (e.key.toLowerCase()) {
       case "w":
       case "arrowup":
@@ -406,6 +417,16 @@
   async function exitEditMode() {
     editMode = false;
     // Layout-Änderungen sind direkt in cfg geschrieben — beim Verlassen persistieren.
+    await saveSettings(cfg).catch((e) => console.warn("save failed", e));
+  }
+
+  // === Design-Modus ===
+  function enterDesignMode() {
+    designMode = true;
+  }
+  async function exitDesignMode() {
+    designMode = false;
+    // Style-Änderungen sind direkt in cfg geschrieben — beim Verlassen persistieren.
     await saveSettings(cfg).catch((e) => console.warn("save failed", e));
   }
 
@@ -505,17 +526,17 @@
 
 <main>
   {#if cfg.mode === "mmo" && cfg.overlayStyle === "tacho"}
-    <Tacho bind:this={tachoRef} {cfg} {state} {editMode} />
+    <Tacho bind:this={tachoRef} {cfg} {state} {editMode} {designMode} />
   {:else}
-    <Ladder bind:this={ladderRef} {cfg} {state} {editMode} />
+    <Ladder bind:this={ladderRef} {cfg} {state} {editMode} {designMode} />
   {/if}
 
   {#if cfg.mode === "mmo" && cfg.streamHpEnabled}
-    <HpBar bind:this={hpRef} {cfg} {state} />
+    <HpBar bind:this={hpRef} {cfg} {state} {designMode} />
   {/if}
 
   {#if cfg.mode === "mmo"}
-    <SkillBar bind:this={skillBarRef} {cfg} {state} {editMode} />
+    <SkillBar bind:this={skillBarRef} {cfg} {state} {editMode} {designMode} />
     <LuckyWheel
       bind:this={wheelRef}
       {cfg}
@@ -530,6 +551,10 @@
       bind:showTemporary={showTemporaryInEdit}
       on:done={exitEditMode}
     />
+  {/if}
+
+  {#if designMode}
+    <Design {cfg} on:done={exitDesignMode} />
   {/if}
 
   {#if panelOpen}

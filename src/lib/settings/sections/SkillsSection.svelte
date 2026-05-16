@@ -5,13 +5,11 @@
     SkillRule,
     SkillEffect,
     SkillEffectKind,
-    SkillTextStyle,
   } from "../../types";
   import {
     Button,
     Callout,
     Card,
-    ColorField,
     Field,
     NumberInput,
     SectionHeader,
@@ -470,213 +468,22 @@
   </Card>
 {/each}
 
-<Card
-  title="Skill-Slot Optik"
-  hint="Globale Einstellungen für die zwei festen Text-Elemente auf jedem Skill-Slot. Das Icon liegt immer mittig, der Status-Effekt-Text zeigt den Heal/Damage-Wert bzw. die Level-Aktion, die Chance-Pille unten zeigt die Wahrscheinlichkeit als Mini-Rad + Text (nur unter 100%)."
->
-  <Field
-    label="Darstellung"
-    hint={`Framed = Slots mit Rahmen und Hintergrund (MMORPG-Look). Clean = nur Icon und Texte, transparent.`}
-  >
-    <div class="seg-row">
-      <button
-        class="seg"
-        class:active={cfg.skillBarStyle === "framed"}
-        on:click={() => (cfg.skillBarStyle = "framed")}
-        type="button"
-      >Framed</button>
-      <button
-        class="seg"
-        class:active={cfg.skillBarStyle === "clean"}
-        on:click={() => (cfg.skillBarStyle = "clean")}
-        type="button"
-      >Clean</button>
-    </div>
-  </Field>
-
-  <div class="rules-head">
-    <span class="rules-title">Status-Effekt-Text</span>
-    <span class="rules-hint">z.B. „+250", „−100", „Lvl ↑"</span>
-  </div>
-
+<Card title="Anzeige">
   <Field>
-    <Toggle bind:checked={cfg.skillValueText.enabled} label="Anzeigen" />
-  </Field>
-
-  <div class="overlay-pos-row">
-    <div class="overlay-pos-cell">
-      <span class="cond-label">X</span>
-      <NumberInput
-        bind:value={cfg.skillValueText.offsetX}
-        min={-0.5}
-        max={1.5}
-        step={0.05}
-        width="84px"
-      />
-      <span class="cond-from">0 = links · 1 = rechts</span>
-    </div>
-    <div class="overlay-pos-cell">
-      <span class="cond-label">Y</span>
-      <NumberInput
-        bind:value={cfg.skillValueText.offsetY}
-        min={-0.5}
-        max={2.0}
-        step={0.05}
-        width="84px"
-      />
-      <span class="cond-from">0 = oben · 1 = unten</span>
-    </div>
-  </div>
-
-  <div class="overlay-pos-row">
-    <div class="overlay-pos-cell">
-      <span class="cond-label">Größe</span>
-      <NumberInput
-        bind:value={cfg.skillValueText.fontSize}
-        min={6}
-        max={120}
-        step={1}
-        suffix="px"
-        width="84px"
-      />
-    </div>
-    <div class="overlay-pos-cell">
-      <span class="cond-label">Gewicht</span>
-      <NumberInput
-        bind:value={cfg.skillValueText.weight}
-        min={100}
-        max={900}
-        step={100}
-        width="84px"
-      />
-    </div>
-  </div>
-
-  <Field label="Farbe" inline>
-    <ColorField bind:value={cfg.skillValueText.color} />
-  </Field>
-  <Field label="Umrandung" inline>
-    <ColorField bind:value={cfg.skillValueText.outlineColor} />
-  </Field>
-  <Field label="Umrandung-Breite" hint="0 = keine Umrandung">
-    <NumberInput
-      bind:value={cfg.skillValueText.outlineSize}
-      min={0}
-      max={6}
-      step={0.5}
-      suffix="px"
-    />
-  </Field>
-  <Field label="Schatten" inline>
-    <ColorField bind:value={cfg.skillValueText.shadowColor} />
-  </Field>
-  <Field label="Schatten-Größe" hint="Blur-Radius. 0 = kein Schatten.">
-    <NumberInput
-      bind:value={cfg.skillValueText.shadowSize}
-      min={0}
-      max={16}
-      step={0.5}
-      suffix="px"
-    />
-  </Field>
-
-  <div class="rules-head">
-    <span class="rules-title">Chance-Pille</span>
-    <span class="rules-hint">
-      Mini-Glücksrad + Prozent. Wird nur angezeigt wenn Chance &lt; 100%.
-    </span>
-  </div>
-
-  <Field>
-    <Toggle bind:checked={cfg.skillChanceText.enabled} label="Anzeigen" />
-  </Field>
-  <Field>
-    <Toggle bind:checked={cfg.skillMiniWheelEnabled} label="Mini-Rad anzeigen" />
-  </Field>
-
-  <div class="overlay-pos-row">
-    <div class="overlay-pos-cell">
-      <span class="cond-label">X</span>
-      <NumberInput
-        bind:value={cfg.skillChanceText.offsetX}
-        min={-0.5}
-        max={1.5}
-        step={0.05}
-        width="84px"
-      />
-      <span class="cond-from">0 = links · 1 = rechts</span>
-    </div>
-    <div class="overlay-pos-cell">
-      <span class="cond-label">Y</span>
-      <NumberInput
-        bind:value={cfg.skillChanceText.offsetY}
-        min={-0.5}
-        max={2.0}
-        step={0.05}
-        width="84px"
-      />
-      <span class="cond-from">0 = oben · 1 = unten</span>
-    </div>
-  </div>
-
-  <div class="overlay-pos-row">
-    <div class="overlay-pos-cell">
-      <span class="cond-label">Größe</span>
-      <NumberInput
-        bind:value={cfg.skillChanceText.fontSize}
-        min={6}
-        max={64}
-        step={1}
-        suffix="px"
-        width="84px"
-      />
-    </div>
-    <div class="overlay-pos-cell">
-      <span class="cond-label">Gewicht</span>
-      <NumberInput
-        bind:value={cfg.skillChanceText.weight}
-        min={100}
-        max={900}
-        step={100}
-        width="84px"
-      />
-    </div>
-  </div>
-
-  <Field label="Farbe" inline>
-    <ColorField bind:value={cfg.skillChanceText.color} />
-  </Field>
-  <Field label="Umrandung" inline>
-    <ColorField bind:value={cfg.skillChanceText.outlineColor} />
-  </Field>
-  <Field label="Umrandung-Breite">
-    <NumberInput
-      bind:value={cfg.skillChanceText.outlineSize}
-      min={0}
-      max={6}
-      step={0.5}
-      suffix="px"
-    />
-  </Field>
-  <Field label="Schatten" inline>
-    <ColorField bind:value={cfg.skillChanceText.shadowColor} />
-  </Field>
-  <Field label="Schatten-Größe">
-    <NumberInput
-      bind:value={cfg.skillChanceText.shadowSize}
-      min={0}
-      max={16}
-      step={0.5}
-      suffix="px"
+    <Toggle
+      bind:checked={cfg.skillBarShowInactive}
+      label="Inaktive Slots ausgegraut anzeigen"
     />
   </Field>
 </Card>
 
 <Callout variant="info">
-  Position und Größe der <strong>Skill-Leiste</strong> und des
-  <strong>Glücksrads</strong> werden im Edit-Modus (Taste <code>E</code>)
-  eingestellt. Für das Rad zusätzlich den <code>Temp</code>-Toggle
-  in der Editor-Toolbar aktivieren, damit es sichtbar wird.
+  Optik der Skill-Leiste (Framed/Clean, Abstand, Status-Effekt-Text, Chance-Pille,
+  Mini-Rad) stellst du im <strong>Design-Modus</strong> (Taste <code>D</code>) ein —
+  Klick auf einen Slot, auf den Wert-Text oder die Chance-Pille öffnet das passende Panel.
+  Position und Größe der Leiste sowie des Glücksrads sind im
+  <strong>Edit-Modus</strong> (Taste <code>E</code>); für das Rad zusätzlich den
+  <code>Temp</code>-Toggle in der Editor-Toolbar aktivieren.
   Trigger über Webhook: <code>GET /skill?id=N</code>.
 </Callout>
 
@@ -948,42 +755,4 @@
     width: 100px;
   }
 
-  .overlay-pos-row {
-    display: flex;
-    gap: var(--sp-3);
-    flex-wrap: wrap;
-  }
-  .overlay-pos-cell {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-    flex: 1;
-    min-width: 0;
-  }
-
-  .seg-row {
-    display: inline-flex;
-    background: var(--c-bg-3);
-    border: 1px solid var(--c-border);
-    border-radius: var(--r-sm);
-    overflow: hidden;
-  }
-  .seg {
-    background: transparent;
-    color: var(--c-text-muted);
-    border: none;
-    padding: 6px 14px;
-    font-size: var(--fs-sm);
-    font-family: inherit;
-    cursor: pointer;
-    transition: background var(--duration), color var(--duration);
-  }
-  .seg:hover {
-    background: var(--c-bg-4);
-    color: var(--c-text);
-  }
-  .seg.active {
-    background: var(--c-accent);
-    color: white;
-  }
 </style>

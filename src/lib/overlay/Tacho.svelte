@@ -6,6 +6,7 @@
   export let cfg: AppSettings;
   export let state: LadderState;
   export let editMode = false;
+  export let designMode = false;
 
   let innerEl: HTMLDivElement;
   export function getElement(): HTMLDivElement | undefined {
@@ -164,11 +165,12 @@
   })();
 </script>
 
-<div class="tacho-wrap" data-tauri-drag-region={editMode ? null : true}>
+<div class="tacho-wrap" data-tauri-drag-region={editMode || designMode ? null : true}>
   <div
     class="tacho"
     bind:this={innerEl}
-    data-tauri-drag-region={editMode ? null : true}
+    data-tauri-drag-region={editMode || designMode ? null : true}
+    data-design-target={designMode ? "tacho.dial" : null}
     style="
       width: {TACHO_BASE_SIZE}px;
       transform: translate({effectiveOffsetLeft}px, {effectiveOffsetTop}px) scale({effectiveScale});

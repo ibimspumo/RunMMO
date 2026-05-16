@@ -6,6 +6,7 @@
   export let cfg: AppSettings;
   export let state: LadderState;
   export let editMode = false;
+  export let designMode = false;
 
   // DOM-Ref des inneren .ladder-Elements (für Editor-Bbox-Messung).
   let innerEl: HTMLDivElement;
@@ -37,11 +38,11 @@
   $: effectiveOffsetTop = cfg.ladderY * autoScale;
 </script>
 
-<div class="ladder-wrap" data-tauri-drag-region={editMode ? null : true}>
+<div class="ladder-wrap" data-tauri-drag-region={editMode || designMode ? null : true}>
   <div
     class="ladder"
     bind:this={innerEl}
-    data-tauri-drag-region={editMode ? null : true}
+    data-tauri-drag-region={editMode || designMode ? null : true}
     style="
       gap: {cfg.spacingBetweenLevels}px;
       transform: translate({effectiveOffsetLeft}px, {effectiveOffsetTop}px) scale({effectiveScale});
@@ -59,6 +60,7 @@
         showTimerHere={isActive}
         timeLeft={state.timeLeft}
         isRunning={state.isRunning}
+        {designMode}
       />
     {/each}
   </div>

@@ -10,6 +10,7 @@
   export let showTimerHere: boolean;
   export let timeLeft: number;
   export let isRunning: boolean;
+  export let designMode: boolean = false;
 
   $: barWidth = cfg.barBaseWidth + (level - 1) * cfg.barWidthIncrement;
   $: barColor = rgbaToCss(cfg.levelColors[level - 1]);
@@ -43,7 +44,7 @@
   }
 </script>
 
-<div class="level-row" data-tauri-drag-region style="height: {cfg.barHeight + 10}px;">
+<div class="level-row" data-tauri-drag-region={designMode ? null : true} style="height: {cfg.barHeight + 10}px;">
   {#if cfg.mode === "simple"}
     <div
       class="label-slot"
@@ -58,7 +59,12 @@
             text-shadow: {textShadow}, {outlineStyle};
           "
         >
-          {timerText}
+          <span
+            class="timer-label-inner"
+            data-design-target={designMode ? "ladder.timer" : null}
+          >
+            {timerText}
+          </span>
         </div>
       {:else if showGift && giftUrl}
         <img
@@ -73,6 +79,7 @@
 
   <div
     class="bar"
+    data-design-target={designMode ? "ladder.bar" : null}
     style="
       width: {barWidth}px;
       height: {cfg.barHeight}px;
@@ -91,7 +98,12 @@
         text-shadow: {textShadow}, {outlineStyle};
       "
     >
-      {level}KMH
+      <span
+        class="level-text-inner"
+        data-design-target={designMode ? "ladder.text" : null}
+      >
+        {level}KMH
+      </span>
     </div>
   </div>
 </div>
@@ -127,5 +139,11 @@
     line-height: 1;
     text-align: center;
     white-space: nowrap;
+  }
+  /* Inner spans = exakte Text-Bbox für Design-Modus-Hit-Targets,
+     damit man neben dem Text noch den Balken anklicken kann. */
+  .level-text-inner,
+  .timer-label-inner {
+    display: inline-block;
   }
 </style>

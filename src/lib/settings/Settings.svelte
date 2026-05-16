@@ -9,8 +9,6 @@
   import SkillsSection from "./sections/SkillsSection.svelte";
   import WebhookSection from "./sections/WebhookSection.svelte";
   import ColorsSection from "./sections/ColorsSection.svelte";
-  import TextSection from "./sections/TextSection.svelte";
-  import BarSection from "./sections/BarSection.svelte";
   import UpdateSection from "./sections/UpdateSection.svelte";
   import Button from "../ui/Button.svelte";
   import { APP_VERSION } from "../version";
@@ -30,8 +28,6 @@
     | "skills"
     | "webhook"
     | "colors"
-    | "text"
-    | "bars"
     | "update";
 
   type TabItem = { id: TabId; label: string; icon: string };
@@ -53,14 +49,7 @@
         { id: "timer", label: "Timer", icon: "◷" },
         { id: "streamhp", label: "Stream-HP", icon: "♥" },
         { id: "skills", label: "Skills", icon: "✦" },
-      ],
-    },
-    {
-      label: "Darstellung",
-      items: [
-        { id: "colors", label: "Farben", icon: "◆" },
-        { id: "text", label: "Text", icon: "T" },
-        { id: "bars", label: "Balken", icon: "▦" },
+        { id: "colors", label: "Level-Farben", icon: "◆" },
       ],
     },
     {
@@ -128,10 +117,6 @@
       <WebhookSection bind:cfg={draft} />
     {:else if activeTab === "colors"}
       <ColorsSection bind:cfg={draft} />
-    {:else if activeTab === "text"}
-      <TextSection bind:cfg={draft} />
-    {:else if activeTab === "bars"}
-      <BarSection bind:cfg={draft} />
     {:else if activeTab === "update"}
       <UpdateSection />
     {/if}
