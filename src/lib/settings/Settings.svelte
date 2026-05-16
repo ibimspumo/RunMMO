@@ -6,6 +6,7 @@
   import AudioSection from "./sections/AudioSection.svelte";
   import TimerSection from "./sections/TimerSection.svelte";
   import StreamHpSection from "./sections/StreamHpSection.svelte";
+  import SkillsSection from "./sections/SkillsSection.svelte";
   import WebhookSection from "./sections/WebhookSection.svelte";
   import ColorsSection from "./sections/ColorsSection.svelte";
   import TextSection from "./sections/TextSection.svelte";
@@ -26,6 +27,7 @@
     | "audio"
     | "timer"
     | "streamhp"
+    | "skills"
     | "webhook"
     | "colors"
     | "text"
@@ -50,6 +52,7 @@
         { id: "audio", label: "Audio", icon: "♪" },
         { id: "timer", label: "Timer", icon: "◷" },
         { id: "streamhp", label: "Stream-HP", icon: "♥" },
+        { id: "skills", label: "Skills", icon: "✦" },
       ],
     },
     {
@@ -119,6 +122,8 @@
       <TimerSection bind:cfg={draft} />
     {:else if activeTab === "streamhp"}
       <StreamHpSection bind:cfg={draft} />
+    {:else if activeTab === "skills"}
+      <SkillsSection bind:cfg={draft} />
     {:else if activeTab === "webhook"}
       <WebhookSection bind:cfg={draft} />
     {:else if activeTab === "colors"}

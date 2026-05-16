@@ -121,6 +121,75 @@ export function defaultSettings(): AppSettings {
     streamHpTextColor: c(1, 1, 1),
     streamHpShowNumbers: true,
     streamHpBorderRadius: 24,
+
+    skills: [exampleHealSkill()],
+
+    skillBarX: 55,
+    skillBarY: 470,
+    skillBarSlotSize: 64,
+    skillBarGap: 8,
+    skillBarShowInactive: true,
+    skillBarStyle: "framed",
+
+    wheelX: 75,
+    wheelY: 220,
+    wheelSize: 300,
+    wheelSpinDurationMs: 2200,
+
+    skillValueText: {
+      enabled: true,
+      fontSize: 18,
+      weight: 800,
+      color: c(1, 1, 1),
+      outlineColor: c(0, 0, 0),
+      outlineSize: 2,
+      shadowColor: c(0, 0, 0, 0.85),
+      shadowSize: 4,
+      offsetX: 0.5,
+      offsetY: 0.82,
+    },
+    skillChanceText: {
+      enabled: true,
+      fontSize: 12,
+      weight: 700,
+      color: c(1, 1, 1),
+      outlineColor: c(0, 0, 0),
+      outlineSize: 1,
+      shadowColor: c(0, 0, 0, 0.85),
+      shadowSize: 3,
+      offsetX: 0.5,
+      offsetY: 1.18,
+    },
+    skillMiniWheelEnabled: true,
+  };
+}
+
+// Beispiel-Heilungs-Skill für eine frische Installation. Demonstriert das
+// Konzept: ein Skill, drei Regeln je nach KMH-Level mit unterschiedlichem
+// Heal-Wert und Wahrscheinlichkeit. Trigger: /skill?id=1
+export function exampleHealSkill(): import("./types").Skill {
+  return {
+    id: 1,
+    name: "Heilung",
+    iconPath: "default:heal",
+    cooldownSec: 5,
+    rules: [
+      {
+        conditions: [{ minKmh: 1, maxKmh: 3, minHpPct: null, maxHpPct: null }],
+        effects: [{ kind: "heal", amount: 250 }],
+        probability: 100,
+      },
+      {
+        conditions: [{ minKmh: 4, maxKmh: 7, minHpPct: null, maxHpPct: null }],
+        effects: [{ kind: "heal", amount: 150 }],
+        probability: 80,
+      },
+      {
+        conditions: [{ minKmh: 8, maxKmh: 12, minHpPct: null, maxHpPct: null }],
+        effects: [{ kind: "heal", amount: 75 }],
+        probability: 50,
+      },
+    ],
   };
 }
 

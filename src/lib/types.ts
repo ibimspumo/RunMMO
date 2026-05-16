@@ -111,6 +111,93 @@ export interface AppSettings {
   streamHpTextColor: RGBA;
   streamHpShowNumbers: boolean;
   streamHpBorderRadius: number;         // px (0 = eckig, hoch = Pille)
+
+  // Skills (nur MMO-Modus). Liste von Webhook-getriggerten Effekten mit
+  // Bedingungen, Regeln und optionaler Wahrscheinlichkeit. Webhook:
+  // GET /skill?id=<Skill.id>.
+  skills: Skill[];
+
+  // Skill-Leiste (Overlay-Element, Edit-Mode). Werte in 450px-Referenzraum.
+  skillBarX: number;
+  skillBarY: number;
+  skillBarSlotSize: number;   // Höhe/Breite eines Slots
+  skillBarGap: number;        // Abstand zwischen Slots
+  skillBarShowInactive: boolean;  // ausgegraute Slots anzeigen, wenn Bedingung nicht erfüllt
+
+  // Anzeigemodus der Skill-Leiste:
+  //  - "framed": Slot mit dunklem Kasten/Rand (klassischer MMORPG-Look)
+  //  - "clean":  Nur Icon + Texte, keine Kästen/Hintergründe (transparent)
+  skillBarStyle: "framed" | "clean";
+
+  // Glücksrad (Overlay-Element). Wird nur sichtbar, wenn gerade gedreht wird,
+  // oder im Edit-Modus mit "Temporäre Elemente"-Toggle.
+  wheelX: number;
+  wheelY: number;
+  wheelSize: number;          // Durchmesser
+  wheelSpinDurationMs: number;
+
+  // Globale Optik der Skill-Slot-Texte. Drei feste Elemente pro Slot:
+  //  - Icon (Mitte, immer)
+  //  - Status-Effekt-Text (z.B. "+250", "Lvl ↑") — nur wenn ein Wert vorhanden
+  //  - Chance-Pille (Mini-Rad + "%") — nur wenn Wahrscheinlichkeit < 100
+  skillValueText: SkillTextStyle;
+  skillChanceText: SkillTextStyle;
+  skillMiniWheelEnabled: boolean;
+}
+
+// Eine Bedingungs-Gruppe (UND-verknüpft innerhalb). Felder mit null werden
+// ignoriert. Mehrere Gruppen pro Rule sind ODER-verknüpft.
+export interface ConditionGroup {
+  minKmh: number | null;    // 1..12 (inklusive)
+  maxKmh: number | null;
+  minHpPct: number | null;  // 0..100 (inklusive)
+  maxHpPct: number | null;
+}
+
+export type SkillEffectKind =
+  | "heal"
+  | "damage"
+  | "levelUp"
+  | "levelDown"
+  | "levelReset";
+
+// Heal/Damage nutzen amount; levelUp/Down/Reset ignorieren ihn.
+export interface SkillEffect {
+  kind: SkillEffectKind;
+  amount: number;
+}
+
+// Globaler Text-Stil für die zwei festen Text-Elemente auf jedem Skill-Slot
+// (Status-Effekt-Wert und Wahrscheinlichkeits-Text). Jedes Element hat
+// dieselben Stil-Optionen — Farbe, Umrandung, Schatten, Position.
+export interface SkillTextStyle {
+  enabled: boolean;
+  fontSize: number;     // px im 450-Referenzraum
+  weight: number;       // 100..900
+  color: RGBA;
+  outlineColor: RGBA;
+  outlineSize: number;  // 0..6 px text-stroke
+  shadowColor: RGBA;
+  shadowSize: number;   // 0..16 px blur
+  // Position als Bruch (0..1) im Slot. 0.5 = Mitte, > 1 = außerhalb darunter.
+  offsetX: number;
+  offsetY: number;
+}
+
+// Erste passende Rule feuert (Reihenfolge in `rules` = Priorität).
+export interface SkillRule {
+  // Leer = immer aktiv. Sonst: mindestens eine Gruppe muss erfüllt sein.
+  conditions: ConditionGroup[];
+  effects: SkillEffect[];
+  probability: number;  // 0..100; 100 = immer, < 100 = Rad
+}
+
+export interface Skill {
+  id: number;             // = ?id= im Webhook /skill?id=N (eindeutig)
+  name: string;
+  iconPath: string | null;
+  rules: SkillRule[];
+  cooldownSec: number;
 }
 
 export interface LadderState {

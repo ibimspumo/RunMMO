@@ -7,10 +7,12 @@
   import Ladder from "./lib/overlay/Ladder.svelte";
   import Tacho from "./lib/overlay/Tacho.svelte";
   import HpBar from "./lib/overlay/HpBar.svelte";
+  import SkillBar from "./lib/overlay/SkillBar.svelte";
+  import LuckyWheel from "./lib/overlay/LuckyWheel.svelte";
   import Settings from "./lib/settings/Settings.svelte";
   import Editor, { type EditTarget } from "./lib/editor/Editor.svelte";
 
-  import type { AppSettings, LadderState } from "./lib/types";
+  import type { AppSettings, LadderState, SkillEffect } from "./lib/types";
   import { defaultSettings } from "./lib/defaults";
   import {
     settings,
@@ -23,6 +25,8 @@
     streamHpDeathSoundUrl,
     triggerHeal,
     triggerDamage,
+    triggerSkill,
+    skillFire,
   } from "./lib/stores";
 
   let cfg: AppSettings = defaultSettings();
@@ -35,6 +39,13 @@
   let ladderRef: Ladder | undefined;
   let tachoRef: Tacho | undefined;
   let hpRef: HpBar | undefined;
+  let skillBarRef: SkillBar | undefined;
+  let wheelRef: LuckyWheel | undefined;
+
+  // Edit-Modus: Toggle für temporäre Elemente (Glücksrad), damit man es
+  // im Editor verschieben/skalieren kann, obwohl es zur Laufzeit nur
+  // beim Spin sichtbar ist.
+  let showTemporaryInEdit = false;
 
   // Reaktive Bindings auf Stores
   const unsubSettings = settings.subscribe((v) => (cfg = v));
@@ -240,8 +251,42 @@
       },
       (amount) => triggerHeal(amount),
       (amount) => triggerDamage(amount),
+      (id) => {
+        const status = triggerSkill(id);
+        console.log("[skill]", status);
+      },
     );
   }
+
+  // Effekte vom Skill-Fire-Pulse anwenden. Heal/Damage gehen über die
+  // bestehenden trigger-Helfer (inkl. Sound + Pulse), Level-Effekte über
+  // die lokalen move-Funktionen (inkl. Level-Sound).
+  function applySkillEffect(eff: SkillEffect) {
+    switch (eff.kind) {
+      case "heal":
+        triggerHeal(eff.amount);
+        break;
+      case "damage":
+        triggerDamage(eff.amount);
+        break;
+      case "levelUp":
+        moveUp();
+        break;
+      case "levelDown":
+        moveDown();
+        break;
+      case "levelReset":
+        resetLevel();
+        break;
+    }
+  }
+  // Subscribe global — feuert für jedes Pulse-Update mit neuer seq.
+  let lastSkillFireSeq = 0;
+  const unsubSkillFire = skillFire.subscribe((fire) => {
+    if (!fire || fire.seq === lastSkillFireSeq) return;
+    lastSkillFireSeq = fire.seq;
+    for (const eff of fire.effects) applySkillEffect(eff);
+  });
 
   // === Aspect Ratio Lock (9:16) ===
   const ASPECT_W = 9;
@@ -302,6 +347,7 @@
     unsubSettings();
     unsubState();
     unsubPanel();
+    unsubSkillFire();
     unlistenResize?.();
     window.removeEventListener("keydown", onKeyDown);
   });
@@ -363,9 +409,11 @@
     await saveSettings(cfg).catch((e) => console.warn("save failed", e));
   }
 
-  $: editTargets = buildEditTargets(cfg);
+  // showTemporaryInEdit muss als Argument durchgereicht werden, damit das
+  // reaktive Statement neu evaluiert wird, wenn der Toggle wechselt.
+  $: editTargets = buildEditTargets(cfg, showTemporaryInEdit);
 
-  function buildEditTargets(c: AppSettings): EditTarget[] {
+  function buildEditTargets(c: AppSettings, showTemp: boolean): EditTarget[] {
     const ts: EditTarget[] = [];
     const showTacho = c.mode === "mmo" && c.overlayStyle === "tacho";
     const mainLabel = showTacho ? "Tacho" : "Leiter";
@@ -404,6 +452,46 @@
         setSize: (w, h) => settings.update((s) => ({ ...s, hpWidth: w, hpHeight: h })),
       });
     }
+    if (c.mode === "mmo") {
+      // Skill-Leiste — kind "wh" mit dem Slot-Quadrat als Resize-Größe.
+      // skillBarSlotSize ist die einzige effektiv resize-bare Dimension
+      // (Breite = n*slotSize + (n-1)*gap), wir mappen W = H = slotSize.
+      ts.push({
+        id: "skillbar",
+        label: "Skill-Leiste",
+        kind: "wh",
+        getElement: () => skillBarRef?.getElement(),
+        getLayout: () => ({ x: cfg.skillBarX, y: cfg.skillBarY }),
+        move: (x, y) =>
+          settings.update((s) => ({ ...s, skillBarX: x, skillBarY: y })),
+        getSize: () => ({ w: cfg.skillBarSlotSize, h: cfg.skillBarSlotSize }),
+        // Slot ist quadratisch — wir nehmen den Mittelwert der vom Editor
+        // gemeldeten W/H, damit die Slot-Größe einheitlich bleibt.
+        setSize: (w, h) =>
+          settings.update((s) => ({
+            ...s,
+            skillBarSlotSize: Math.max(20, Math.min(200, (w + h) / 2)),
+          })),
+      });
+    }
+    if (c.mode === "mmo" && showTemp) {
+      ts.push({
+        id: "wheel",
+        label: "Glücksrad",
+        kind: "wh",
+        getElement: () => wheelRef?.getElement(),
+        getLayout: () => ({ x: cfg.wheelX, y: cfg.wheelY }),
+        move: (x, y) =>
+          settings.update((s) => ({ ...s, wheelX: x, wheelY: y })),
+        // Rad ist rund; nimm Mittelwert wie bei der Skill-Leiste.
+        getSize: () => ({ w: cfg.wheelSize, h: cfg.wheelSize }),
+        setSize: (w, h) =>
+          settings.update((s) => ({
+            ...s,
+            wheelSize: Math.max(80, Math.min(800, (w + h) / 2)),
+          })),
+      });
+    }
     return ts;
   }
 
@@ -426,8 +514,22 @@
     <HpBar bind:this={hpRef} {cfg} {state} />
   {/if}
 
+  {#if cfg.mode === "mmo"}
+    <SkillBar bind:this={skillBarRef} {cfg} {state} {editMode} />
+    <LuckyWheel
+      bind:this={wheelRef}
+      {cfg}
+      {editMode}
+      showInEditMode={showTemporaryInEdit}
+    />
+  {/if}
+
   {#if editMode}
-    <Editor targets={editTargets} on:done={exitEditMode} />
+    <Editor
+      targets={editTargets}
+      bind:showTemporary={showTemporaryInEdit}
+      on:done={exitEditMode}
+    />
   {/if}
 
   {#if panelOpen}

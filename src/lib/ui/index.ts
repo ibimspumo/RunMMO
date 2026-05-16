@@ -8,5 +8,6 @@ export { default as Field } from "./Field.svelte";
 export { default as FilePicker } from "./FilePicker.svelte";
 export { default as NumberInput } from "./NumberInput.svelte";
 export { default as SectionHeader } from "./SectionHeader.svelte";
+export { default as SkillIconPicker } from "./SkillIconPicker.svelte";
 export { default as Slider } from "./Slider.svelte";
 export { default as Toggle } from "./Toggle.svelte";

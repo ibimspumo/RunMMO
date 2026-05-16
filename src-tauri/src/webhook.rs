@@ -63,6 +63,11 @@ struct HpParams {
     amount: Option<f32>,
 }
 
+#[derive(Deserialize)]
+struct SkillParams {
+    id: Option<i32>,
+}
+
 fn cors_headers() -> CorsLayer {
     CorsLayer::permissive()
 }
@@ -75,6 +80,7 @@ fn build_router(state: AxumState) -> Router {
         .route("/gift", get(handle_gift))
         .route("/heal", get(handle_heal))
         .route("/damage", get(handle_damage))
+        .route("/skill", get(handle_skill))
         .route("/status", get(handle_status))
         .route("/", get(handle_root))
         .with_state(state)
@@ -194,6 +200,28 @@ async fn handle_damage(
     json_ok(&format!("Damage -{} HP", amount))
 }
 
+async fn handle_skill(
+    State(s): State<AxumState>,
+    Query(params): Query<SkillParams>,
+) -> impl IntoResponse {
+    let id = match params.id {
+        Some(i) => i,
+        None => {
+            return json_err(
+                StatusCode::BAD_REQUEST,
+                "Parameter 'id' fehlt. Verwendung: /skill?id=N",
+            )
+        }
+    };
+    if id < 1 {
+        return json_err(StatusCode::BAD_REQUEST, "Skill-ID muss >= 1 sein");
+    }
+    let _ = s
+        .app
+        .emit("webhook", json!({ "kind": "skill", "id": id }));
+    json_ok(&format!("Skill #{} ausgelöst", id))
+}
+
 async fn handle_status(State(s): State<AxumState>) -> impl IntoResponse {
     // Frontend nach aktuellem Status fragen; mit Timeout auf Antwort warten
     let reply_id = Uuid::new_v4().to_string();
@@ -229,7 +257,8 @@ async fn handle_root() -> impl IntoResponse {
         "app": "RunMMO",
         "endpoints": [
             "/up", "/down", "/reset", "/gift?level=X",
-            "/heal?amount=X", "/damage?amount=X", "/status"
+            "/heal?amount=X", "/damage?amount=X",
+            "/skill?id=N", "/status"
         ]
     }))
 }

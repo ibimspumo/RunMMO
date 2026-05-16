@@ -4,13 +4,20 @@ import { listen } from "@tauri-apps/api/event";
 import { Store } from "@tauri-apps/plugin-store";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
-import type { AppSettings, LadderState } from "./types";
+import type {
+  AppSettings,
+  LadderState,
+  Skill,
+  SkillEffect,
+  SkillRule,
+} from "./types";
 import {
   defaultSettings,
   DEFAULT_GIFT_URLS,
   DEFAULT_UP_SOUND_URL,
   DEFAULT_DOWN_SOUND_URL,
 } from "./defaults";
+import { resolveDefaultIcon } from "./skill-icons";
 
 const SETTINGS_FILE = "settings.json";
 const SETTINGS_KEY = "settings";
@@ -116,12 +123,14 @@ export async function bindBackendEvents(
   onStatusRequest: (replyId: string) => void,
   onHeal: (amount: number) => void,
   onDamage: (amount: number) => void,
+  onSkill: (id: number) => void,
 ): Promise<void> {
   await listen<{
     kind: string;
     level?: number;
     amount?: number;
     replyId?: string;
+    id?: number;
   }>("webhook", (event) => {
     const p = event.payload;
     switch (p.kind) {
@@ -142,6 +151,9 @@ export async function bindBackendEvents(
         break;
       case "damage":
         if (typeof p.amount === "number") onDamage(p.amount);
+        break;
+      case "skill":
+        if (typeof p.id === "number") onSkill(p.id);
         break;
       case "status":
         if (p.replyId) onStatusRequest(p.replyId);
@@ -206,4 +218,148 @@ export function triggerDamage(amount: number): void {
   }));
   playUrl(streamHpDamageSoundUrl(cfg), cfg.volumeDb);
   emitPulse("damage", amount);
+}
+
+// =================== Skill-Engine ===================
+
+// Icon-URL für einen Skill:
+//  - null → kein Icon
+//  - "default:<key>" → gebündeltes Default-Icon (aus skill-icons.ts)
+//  - sonst → User-Pfad via convertFileSrc
+export function skillIconUrl(skill: Skill): string | null {
+  if (!skill.iconPath) return null;
+  if (skill.iconPath.startsWith("default:")) {
+    return resolveDefaultIcon(skill.iconPath);
+  }
+  return convertFileSrc(skill.iconPath);
+}
+
+// Cooldown-Tracking pro Skill-ID. Wird zur Laufzeit gehalten — nicht persistiert.
+export const skillRuntime: Writable<Record<number, { cooldownUntilMs: number }>> =
+  writable({});
+
+export function isSkillOnCooldown(id: number, nowMs?: number): boolean {
+  const rt = get(skillRuntime)[id];
+  if (!rt) return false;
+  return rt.cooldownUntilMs > (nowMs ?? Date.now());
+}
+
+export function skillCooldownRemainingMs(id: number): number {
+  const rt = get(skillRuntime)[id];
+  if (!rt) return 0;
+  return Math.max(0, rt.cooldownUntilMs - Date.now());
+}
+
+// Bedingungs-Matching. Felder mit null werden ignoriert.
+function conditionGroupMatches(
+  c: import("./types").ConditionGroup,
+  level1Based: number,
+  hpPct: number,
+): boolean {
+  if (c.minKmh != null && level1Based < c.minKmh) return false;
+  if (c.maxKmh != null && level1Based > c.maxKmh) return false;
+  if (c.minHpPct != null && hpPct < c.minHpPct) return false;
+  if (c.maxHpPct != null && hpPct > c.maxHpPct) return false;
+  return true;
+}
+
+export function ruleMatches(
+  r: SkillRule,
+  level1Based: number,
+  hpPct: number,
+): boolean {
+  if (r.conditions.length === 0) return true;
+  return r.conditions.some((c) => conditionGroupMatches(c, level1Based, hpPct));
+}
+
+export function findMatchingRule(
+  skill: Skill,
+  level1Based: number,
+  hpPct: number,
+): SkillRule | null {
+  for (const r of skill.rules) {
+    if (ruleMatches(r, level1Based, hpPct)) return r;
+  }
+  return null;
+}
+
+// Wheel-Anforderung: wird vom Skill-Trigger gesetzt, vom LuckyWheel konsumiert.
+// `success` ist vorbestimmt — das Rad dreht sich nur visuell zur richtigen Seite.
+export type WheelSpinRequest = {
+  skillId: number;
+  chance: number;       // 0..100
+  success: boolean;
+  effects: SkillEffect[];
+};
+export const wheelSpin: Writable<WheelSpinRequest | null> = writable(null);
+
+// Skill-Fire-Event: einmaliger Puls mit anzuwendenden Effekten + Skill-ID.
+// App.svelte hört darauf und mappt die Effekte auf die lokalen Aktionen
+// (heal/damage über stores, levelUp/Down/Reset über lokale Funktionen).
+export type SkillFire = {
+  skillId: number;
+  effects: SkillEffect[];
+  seq: number;
+};
+export const skillFire: Writable<SkillFire | null> = writable(null);
+
+let fireSeq = 0;
+export function emitSkillFire(skillId: number, effects: SkillEffect[]): void {
+  fireSeq += 1;
+  skillFire.set({ skillId, effects, seq: fireSeq });
+}
+
+// Berechnet aktuelle Lebenspunkte in Prozent für Bedingungs-Matching.
+function currentHpPct(cfg: AppSettings, state: LadderState): number {
+  if (!cfg.streamHpEnabled) return 100;
+  return (Math.max(0, state.hp) / Math.max(1, cfg.streamHpMax)) * 100;
+}
+
+// Skill-Trigger (vom Webhook /skill?id=N aufgerufen).
+// Liefert einen kurzen Status-String zurück (für Debug-Logs).
+export function triggerSkill(id: number): string {
+  const cfg = get(settings);
+  const state = get(ladderState);
+  if (cfg.mode !== "mmo") return "skill ignored (not mmo mode)";
+  const skill = cfg.skills.find((s) => s.id === id);
+  if (!skill) return `skill #${id} not found`;
+  if (isSkillOnCooldown(id)) return `skill #${id} on cooldown`;
+
+  const level1 = state.currentLevel + 1;
+  const hpPct = currentHpPct(cfg, state);
+  const rule = findMatchingRule(skill, level1, hpPct);
+  if (!rule) return `skill #${id} no matching rule`;
+
+  // Cooldown sofort setzen (auch bei probabilistischem Fehlschlag).
+  const until = Date.now() + Math.max(0, skill.cooldownSec) * 1000;
+  skillRuntime.update((r) => ({ ...r, [id]: { cooldownUntilMs: until } }));
+
+  if (rule.probability >= 100) {
+    emitSkillFire(id, rule.effects);
+    return `skill #${id} fired (100%)`;
+  }
+  // Probability < 100: Würfel rollen, Rad zeigt animiert das Ergebnis.
+  const success = Math.random() * 100 < Math.max(0, Math.min(100, rule.probability));
+  // Falls schon ein Spin läuft → kurzer Pass-through (kein Stacking).
+  if (get(wheelSpin)) {
+    if (success) emitSkillFire(id, rule.effects);
+    return `skill #${id} ${success ? "fired" : "missed"} (wheel busy)`;
+  }
+  wheelSpin.set({
+    skillId: id,
+    chance: rule.probability,
+    success,
+    effects: rule.effects,
+  });
+  return `skill #${id} spinning (${rule.probability}%, predetermined=${success})`;
+}
+
+// Hilfsfunktion für SkillBar: liefert für einen Skill die aktuell "scheinbar"
+// passende Regel (für Vorschau der Werte/Chance-Text-Overlays).
+export function previewRule(skill: Skill): SkillRule | null {
+  const cfg = get(settings);
+  const state = get(ladderState);
+  const level1 = state.currentLevel + 1;
+  const hpPct = currentHpPct(cfg, state);
+  return findMatchingRule(skill, level1, hpPct);
 }

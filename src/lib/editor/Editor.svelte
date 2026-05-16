@@ -1,5 +1,5 @@
 <script lang="ts" context="module">
-  export type TargetId = "ladder" | "tacho" | "hp";
+  export type TargetId = "ladder" | "tacho" | "hp" | "skillbar" | "wheel";
 
   export interface EditTarget {
     id: TargetId;
@@ -25,6 +25,11 @@
   import { createEventDispatcher, onMount, onDestroy, tick } from "svelte";
 
   export let targets: EditTarget[];
+  // Toggle für nicht-permanent sichtbare Overlay-Elemente (z.B. das Glücksrad,
+  // das normalerweise nur beim Spin angezeigt wird). Wenn aktiv, werden diese
+  // Elemente während des Edit-Modus sichtbar gemacht, damit sie verschoben
+  // und skaliert werden können.
+  export let showTemporary = false;
 
   const dispatch = createEventDispatcher<{ done: void }>();
 
@@ -491,6 +496,14 @@
         title="Snapping ein/aus (Magnet zu Mittellinien & anderen Elementen)"
       >
         Snap
+      </button>
+      <button
+        class="tb-btn snap"
+        class:active={showTemporary}
+        on:click={() => (showTemporary = !showTemporary)}
+        title="Temporäre Elemente einblenden (z.B. Glücksrad)"
+      >
+        Temp
       </button>
       <div class="sep"></div>
       <button class="tb-btn primary" on:click={done} title="Fertig (E / ESC)">✓ Fertig</button>
