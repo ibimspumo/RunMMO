@@ -6,8 +6,8 @@ Instruktionen für Claude Code beim Arbeiten an diesem Repo.
 
 Tauri 2 Desktop-App für TikTok-Streamer. Zeigt ein 9:16 transparentes Overlay
 (Levelleiter 1KMH–12KMH), das per HTTP-Webhooks von externen Tools (TikFinity etc.)
-gesteuert wird. Vorlage war ein Godot-Projekt im Ordner `LeiterGoDot/` — das ist
-**Referenz only**, wird nicht mehr verändert oder ausgeliefert.
+gesteuert wird. Ursprünglich Godot-Prototyp — komplett auf Tauri portiert, keine
+Godot-Referenz mehr im Repo.
 
 App-Sprache **Deutsch only**. Plattformen: Windows (primär) + macOS.
 
@@ -39,7 +39,9 @@ src/                       Svelte-Frontend
     stores.ts              Svelte stores + load/save + Event-Binding
     version.ts             APP_VERSION (manuell bei Release hochsetzen!)
     overlay/               Ladder.svelte, LevelBar.svelte
-    settings/              Settings.svelte + sections/*.svelte (8 Tabs)
+    settings/              Settings.svelte + sections/*.svelte (9 Tabs)
+    ui/                    Design-System: tokens.css + Atom-Komponenten
+                           (Button, Card, Field, FilePicker, …)
   assets/defaults/         Gebündelte Default-Grafiken + Sounds
 src-tauri/
   src/
@@ -49,7 +51,6 @@ src-tauri/
     commands.rs            #[tauri::command] Funktionen
   tauri.conf.json          Fenster, Plugins, Updater
   capabilities/default.json Permissions
-LeiterGoDot/               Original Godot-Projekt – nicht anfassen
 .github/workflows/release.yml  Multi-Plattform Release-Pipeline
 ```
 
@@ -70,7 +71,7 @@ Wenn du ein neues Settings-Feld hinzufügst:
 
 `cfg.mode`:
 - **`"mmo"`** (Default): kein Timer, keine Geschenk-Icons im UI, Level nur via Webhook
-- **`"simple"`**: Godot-1:1, Timer pro Level, Geschenke an Nachbar-Levels
+- **`"simple"`**: Klassisch, Timer pro Level, Geschenke an Nachbar-Levels
 
 Beim Modus-Wechsel zur Laufzeit (`onSave` in App.svelte) wird der State angepasst.
 Logik, die nur einen Modus betrifft, **immer** mit `if (cfg.mode === "simple")` gaten.
@@ -139,7 +140,6 @@ cd src-tauri && cargo build                    # Rust-Build only
 
 ## Was NICHT zu tun ist
 
-- **Niemals** `LeiterGoDot/` modifizieren — das ist die Original-Referenz
 - **Niemals** den privaten Key in `C:\Users\timo\.tauri\runmmo.key` committen
 - **Niemals** den `pubkey` in `tauri.conf.json` ändern, ohne die GH-Secret
   zu rotieren — sonst können bestehende Installs keine Updates mehr verifizieren

@@ -1,0 +1,12 @@
+/* Barrel-Export für UI-Atome. So importierst du in Sections:
+   import { Card, Field, Toggle, NumberInput, Slider, ColorField, FilePicker, Button, Callout, SectionHeader } from "../../ui"; */
+export { default as Button } from "./Button.svelte";
+export { default as Callout } from "./Callout.svelte";
+export { default as Card } from "./Card.svelte";
+export { default as ColorField } from "./ColorField.svelte";
+export { default as Field } from "./Field.svelte";
+export { default as FilePicker } from "./FilePicker.svelte";
+export { default as NumberInput } from "./NumberInput.svelte";
+export { default as SectionHeader } from "./SectionHeader.svelte";
+export { default as Slider } from "./Slider.svelte";
+export { default as Toggle } from "./Toggle.svelte";

@@ -1,92 +1,106 @@
 <script lang="ts">
   import type { AppSettings } from "../../types";
+  import { Card, Field, NumberInput, SectionHeader } from "../../ui";
+
   export let cfg: AppSettings;
 
-  const fields: { key: keyof AppSettings; label: string; min: number; max: number; step?: number }[] = [
-    { key: "barBaseWidth", label: "Balken Basis-Breite (px)", min: 10, max: 1000 },
-    { key: "barWidthIncrement", label: "Breite pro Level (px)", min: 0, max: 500 },
-    { key: "barHeight", label: "Balken-Höhe (px)", min: 5, max: 300 },
-    { key: "barBorderRadius", label: "Balken Border-Radius (px)", min: 0, max: 100 },
-    { key: "barPaddingTop", label: "Padding oben", min: 0, max: 100 },
-    { key: "barPaddingBottom", label: "Padding unten", min: 0, max: 100 },
-    { key: "barPaddingLeft", label: "Padding links", min: 0, max: 100 },
-    { key: "barPaddingRight", label: "Padding rechts", min: 0, max: 100 },
-    { key: "iconSize", label: "Icon-Größe (px)", min: 5, max: 200 },
-    { key: "spacingBetweenLevels", label: "Abstand zwischen Levels", min: 0, max: 100 },
-    { key: "activeBarOutlineWidth", label: "Aktiv-Rahmen Breite", min: 0, max: 20 },
+  type Numeric = {
+    [K in keyof AppSettings]: AppSettings[K] extends number ? K : never;
+  }[keyof AppSettings];
+
+  type FieldDef = {
+    key: Numeric;
+    label: string;
+    min: number;
+    max: number;
+    step?: number;
+    suffix?: string;
+  };
+
+  const overlayFields: FieldDef[] = [
+    { key: "overlayScale", label: "Skalierung", min: 0.1, max: 2.0, step: 0.05, suffix: "x" },
+    { key: "overlayOffsetLeft", label: "Offset links", min: 0, max: 4000, suffix: "px" },
+    { key: "overlayOffsetTop", label: "Offset oben", min: 0, max: 4000, suffix: "px" },
   ];
 
-  const overlayFields: { key: keyof AppSettings; label: string; min: number; max: number; step: number }[] = [
-    { key: "overlayScale", label: "Overlay Skalierung (1.0 = 100%)", min: 0.1, max: 2.0, step: 0.05 },
-    { key: "overlayOffsetLeft", label: "Offset von links (px)", min: 0, max: 4000, step: 1 },
-    { key: "overlayOffsetTop", label: "Offset von oben (px)", min: 0, max: 4000, step: 1 },
+  const sizeFields: FieldDef[] = [
+    { key: "barBaseWidth", label: "Basis-Breite", min: 10, max: 1000, suffix: "px" },
+    { key: "barWidthIncrement", label: "Breite pro Level", min: 0, max: 500, suffix: "px" },
+    { key: "barHeight", label: "Höhe", min: 5, max: 300, suffix: "px" },
+    { key: "barBorderRadius", label: "Border-Radius", min: 0, max: 100, suffix: "px" },
+    { key: "iconSize", label: "Icon-Größe", min: 5, max: 200, suffix: "px" },
+    { key: "spacingBetweenLevels", label: "Abstand zwischen Levels", min: 0, max: 100, suffix: "px" },
+    { key: "activeBarOutlineWidth", label: "Aktiv-Rahmen Breite", min: 0, max: 20, suffix: "px" },
+  ];
+
+  const paddingFields: FieldDef[] = [
+    { key: "barPaddingTop", label: "Oben", min: 0, max: 100, suffix: "px" },
+    { key: "barPaddingBottom", label: "Unten", min: 0, max: 100, suffix: "px" },
+    { key: "barPaddingLeft", label: "Links", min: 0, max: 100, suffix: "px" },
+    { key: "barPaddingRight", label: "Rechts", min: 0, max: 100, suffix: "px" },
   ];
 </script>
 
-<h2>Overlay-Position</h2>
-<p class="hint">
-  Für Fullscreen-Overlay-Setup. Skaliert die komplette Leiter und positioniert sie
-  vom oberen-linken Fensterrand aus. Die Werte sind als Referenz bei 450px
-  Fensterbreite — bei größerem Fenster wachsen sie automatisch proportional mit.
-</p>
+<SectionHeader
+  title="Layout"
+  description="Position und Größen. Werte beziehen sich auf 450px Fensterbreite — bei größerem Fenster skaliert alles proportional mit."
+/>
 
-{#each overlayFields as f}
-  <div class="field">
-    <label>{f.label}</label>
-    <input
-      type="number"
-      min={f.min}
-      max={f.max}
-      step={f.step}
-      bind:value={cfg[f.key]}
-    />
+<Card
+  title="Overlay-Position"
+  hint="Skaliert die komplette Leiter und positioniert sie vom oberen-linken Fensterrand."
+>
+  <div class="grid">
+    {#each overlayFields as f}
+      <Field label={f.label}>
+        <NumberInput
+          bind:value={cfg[f.key]}
+          min={f.min}
+          max={f.max}
+          step={f.step ?? 1}
+          suffix={f.suffix}
+        />
+      </Field>
+    {/each}
   </div>
-{/each}
+</Card>
 
-<h2 style="margin-top: 18px;">Layout der Balken</h2>
-
-{#each fields as f}
-  <div class="field">
-    <label>{f.label}</label>
-    <input
-      type="number"
-      min={f.min}
-      max={f.max}
-      step={f.step ?? 1}
-      bind:value={cfg[f.key]}
-    />
+<Card title="Balken-Größen">
+  <div class="grid">
+    {#each sizeFields as f}
+      <Field label={f.label}>
+        <NumberInput
+          bind:value={cfg[f.key]}
+          min={f.min}
+          max={f.max}
+          step={f.step ?? 1}
+          suffix={f.suffix}
+        />
+      </Field>
+    {/each}
   </div>
-{/each}
+</Card>
+
+<Card title="Balken-Padding">
+  <div class="grid">
+    {#each paddingFields as f}
+      <Field label={f.label}>
+        <NumberInput
+          bind:value={cfg[f.key]}
+          min={f.min}
+          max={f.max}
+          step={f.step ?? 1}
+          suffix={f.suffix}
+        />
+      </Field>
+    {/each}
+  </div>
+</Card>
 
 <style>
-  h2 {
-    font-size: 14px;
-    margin-bottom: 8px;
-    font-family: system-ui, sans-serif;
-  }
-  .hint {
-    font-size: 10px;
-    color: #888;
-    margin-bottom: 10px;
-    line-height: 1.4;
-  }
-  .field {
-    margin-bottom: 8px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  label {
-    font-size: 11px;
-    color: #ddd;
-    flex: 1;
-  }
-  input[type="number"] {
-    background: #1a1a20;
-    color: #eee;
-    border: 1px solid #333;
-    border-radius: 3px;
-    padding: 4px 8px;
-    width: 100px;
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: var(--sp-3) var(--sp-4);
   }
 </style>

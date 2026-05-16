@@ -2,6 +2,7 @@
   import { check, type Update } from "@tauri-apps/plugin-updater";
   import { relaunch } from "@tauri-apps/plugin-process";
   import { APP_VERSION } from "../../version";
+  import { Button, Callout, Card, SectionHeader } from "../../ui";
 
   type State =
     | { kind: "idle" }
@@ -19,16 +20,9 @@
     state = { kind: "checking" };
     try {
       const update = await check();
-      if (update) {
-        state = { kind: "available", update };
-      } else {
-        state = { kind: "up-to-date" };
-      }
+      state = update ? { kind: "available", update } : { kind: "up-to-date" };
     } catch (err) {
-      state = {
-        kind: "error",
-        message: err instanceof Error ? err.message : String(err),
-      };
+      state = { kind: "error", message: err instanceof Error ? err.message : String(err) };
     }
   }
 
@@ -56,15 +50,10 @@
             break;
         }
       });
-
-      // Auf Windows kann der Installer einen Restart erzwingen; sonst manuell.
       state = { kind: "done", willRestart: true };
       setTimeout(() => relaunch().catch(console.error), 1500);
     } catch (err) {
-      state = {
-        kind: "error",
-        message: err instanceof Error ? err.message : String(err),
-      };
+      state = { kind: "error", message: err instanceof Error ? err.message : String(err) };
     }
   }
 
@@ -81,28 +70,26 @@
   }
 </script>
 
-<h2>Updates</h2>
-<p class="hint">
-  Aktuelle Version: <strong>v{APP_VERSION}</strong><br />
-  Updates werden über die GitHub-Releases des Projekts verteilt.
-</p>
+<SectionHeader
+  title="Updates"
+  description="Updates werden über die GitHub-Releases des Projekts verteilt und signiert verifiziert."
+/>
 
-<div class="actions">
+<Card>
+  <div class="version-row">
+    <span class="label">Installierte Version</span>
+    <span class="version">v{APP_VERSION}</span>
+  </div>
+
   {#if state.kind === "idle"}
-    <button class="btn-primary" on:click={checkForUpdate}>
-      Nach Updates suchen
-    </button>
+    <Button variant="primary" on:click={checkForUpdate}>Nach Updates suchen</Button>
   {:else if state.kind === "checking"}
-    <button class="btn-primary" disabled>Suche läuft…</button>
+    <Button variant="primary" disabled>Suche läuft…</Button>
   {:else if state.kind === "up-to-date"}
-    <div class="msg success">
-      ✓ Du bist auf der neuesten Version (v{APP_VERSION}).
-    </div>
-    <button class="btn-secondary" on:click={checkForUpdate}>
-      Erneut prüfen
-    </button>
+    <Callout variant="success">Du bist auf der neuesten Version.</Callout>
+    <Button variant="secondary" on:click={checkForUpdate}>Erneut prüfen</Button>
   {:else if state.kind === "available"}
-    <div class="msg info">
+    <Callout variant="info">
       <strong>Update verfügbar: v{state.update.version}</strong>
       {#if state.update.date}
         <div class="meta">Veröffentlicht: {state.update.date}</div>
@@ -110,139 +97,84 @@
       {#if state.update.body}
         <pre class="changelog">{state.update.body}</pre>
       {/if}
-    </div>
+    </Callout>
     <div class="button-row">
-      <button class="btn-primary" on:click={downloadAndInstall}>
-        Herunterladen & installieren
-      </button>
-      <button class="btn-secondary" on:click={() => (state = { kind: "idle" })}>
+      <Button variant="primary" on:click={downloadAndInstall}>
+        Herunterladen &amp; installieren
+      </Button>
+      <Button variant="ghost" on:click={() => (state = { kind: "idle" })}>
         Später
-      </button>
+      </Button>
     </div>
   {:else if state.kind === "downloading"}
-    <div class="msg info">
+    <Callout variant="info">
       Lade herunter… {fmtBytes(state.progress)}
       {#if state.total}/ {fmtBytes(state.total)} ({percent(state)}%){/if}
       <div class="progress-bar">
-        <div
-          class="progress-fill"
-          style="width: {state.total ? percent(state) : 100}%"
-        ></div>
+        <div class="progress-fill" style="width: {state.total ? percent(state) : 100}%"></div>
       </div>
-    </div>
+    </Callout>
   {:else if state.kind === "installing"}
-    <div class="msg info">Installiere Update…</div>
+    <Callout variant="info">Installiere Update…</Callout>
   {:else if state.kind === "done"}
-    <div class="msg success">
-      ✓ Update installiert. Die App startet gleich neu…
-    </div>
+    <Callout variant="success">Update installiert. Die App startet gleich neu…</Callout>
   {:else if state.kind === "error"}
-    <div class="msg error">
-      Fehler: {state.message}
-    </div>
-    <button class="btn-secondary" on:click={() => (state = { kind: "idle" })}>
+    <Callout variant="error">Fehler: {state.message}</Callout>
+    <Button variant="secondary" on:click={() => (state = { kind: "idle" })}>
       Erneut versuchen
-    </button>
+    </Button>
   {/if}
-</div>
+</Card>
 
 <style>
-  h2 {
-    font-size: 14px;
-    margin-bottom: 8px;
-    font-family: system-ui, sans-serif;
-  }
-  .hint {
-    font-size: 11px;
-    color: #aaa;
-    margin-bottom: 16px;
-    line-height: 1.5;
-  }
-  .actions {
+  .version-row {
     display: flex;
-    flex-direction: column;
-    gap: 10px;
+    align-items: baseline;
+    justify-content: space-between;
+    padding-bottom: var(--sp-2);
+    border-bottom: 1px solid var(--c-border);
+  }
+  .label {
+    font-size: var(--fs-sm);
+    color: var(--c-text-muted);
+  }
+  .version {
+    font-family: var(--font-mono);
+    font-size: var(--fs-md);
+    color: var(--c-text);
+    font-weight: 600;
   }
   .button-row {
     display: flex;
-    gap: 8px;
-  }
-  button {
-    border: none;
-    border-radius: 4px;
-    padding: 8px 14px;
-    font-size: 12px;
-    font-family: system-ui, sans-serif;
-    cursor: pointer;
-    align-self: flex-start;
-  }
-  button:disabled {
-    opacity: 0.6;
-    cursor: default;
-  }
-  .btn-primary {
-    background: #2563eb;
-    color: white;
-  }
-  .btn-primary:hover:not(:disabled) {
-    background: #1d4ed8;
-  }
-  .btn-secondary {
-    background: #2a2a30;
-    color: #ddd;
-  }
-  .btn-secondary:hover {
-    background: #3a3a42;
-  }
-  .msg {
-    padding: 10px 12px;
-    border-radius: 4px;
-    font-size: 12px;
-    line-height: 1.5;
-    font-family: system-ui, sans-serif;
-  }
-  .msg.success {
-    background: rgba(34, 197, 94, 0.1);
-    border-left: 3px solid #22c55e;
-    color: #86efac;
-  }
-  .msg.info {
-    background: rgba(37, 99, 235, 0.1);
-    border-left: 3px solid #2563eb;
-    color: #bfdbfe;
-  }
-  .msg.error {
-    background: rgba(239, 68, 68, 0.1);
-    border-left: 3px solid #ef4444;
-    color: #fca5a5;
+    gap: var(--sp-2);
   }
   .meta {
-    font-size: 10px;
-    color: #999;
-    margin-top: 4px;
+    font-size: var(--fs-xs);
+    color: var(--c-text-muted);
+    margin-top: var(--sp-1);
   }
   .changelog {
-    margin-top: 8px;
-    padding: 6px 8px;
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: 3px;
-    font-size: 11px;
-    color: #ccc;
+    margin-top: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: var(--r-sm);
+    font-size: var(--fs-xs);
+    color: var(--c-text);
     white-space: pre-wrap;
-    font-family: ui-monospace, monospace;
+    font-family: var(--font-mono);
     max-height: 200px;
     overflow-y: auto;
   }
   .progress-bar {
-    margin-top: 8px;
+    margin-top: var(--sp-2);
     height: 6px;
-    background: rgba(0, 0, 0, 0.3);
+    background: rgba(0, 0, 0, 0.4);
     border-radius: 3px;
     overflow: hidden;
   }
   .progress-fill {
     height: 100%;
-    background: #2563eb;
+    background: var(--c-accent);
     transition: width 0.15s ease-out;
   }
 </style>

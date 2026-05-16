@@ -59,7 +59,7 @@ jobs:
             Siehe Commit-Historie für Details.
 
             ### Installation
-            - **Windows**: `.msi` oder `.exe` herunterladen
+            - **Windows**: `.exe` (NSIS-Installer) herunterladen
             - **macOS**: `.dmg` herunterladen
 
             ### Auto-Update

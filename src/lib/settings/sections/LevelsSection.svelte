@@ -1,41 +1,15 @@
 <script lang="ts">
-  import { open } from "@tauri-apps/plugin-dialog";
   import { convertFileSrc } from "@tauri-apps/api/core";
   import type { AppSettings } from "../../types";
   import { DEFAULT_GIFT_URLS } from "../../defaults";
+  import { FilePicker, SectionHeader } from "../../ui";
+  import { soundUrlForLevel } from "../../stores";
+  import { previewAudio } from "../../ui/audio-preview";
 
   export let cfg: AppSettings;
 
-  async function pickImage(idx: number) {
-    const file = await open({
-      multiple: false,
-      filters: [{ name: "Bilder", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"] }],
-    });
-    if (typeof file === "string") {
-      cfg.levels[idx].imagePath = file;
-      cfg = cfg;
-    }
-  }
-
-  async function pickSound(idx: number) {
-    const file = await open({
-      multiple: false,
-      filters: [{ name: "Audio", extensions: ["mp3", "wav", "ogg", "m4a", "flac"] }],
-    });
-    if (typeof file === "string") {
-      cfg.levels[idx].soundPath = file;
-      cfg = cfg;
-    }
-  }
-
-  function clearImage(idx: number) {
-    cfg.levels[idx].imagePath = null;
-    cfg = cfg;
-  }
-  function clearSound(idx: number) {
-    cfg.levels[idx].soundPath = null;
-    cfg = cfg;
-  }
+  const imgFilters = [{ name: "Bilder", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"] }];
+  const sndFilters = [{ name: "Audio", extensions: ["mp3", "wav", "ogg", "m4a", "flac"] }];
 
   function previewUrl(idx: number): string | null {
     const p = cfg.levels[idx].imagePath;
@@ -44,168 +18,106 @@
   }
 
   function playPreview(idx: number) {
-    const p = cfg.levels[idx].soundPath;
-    if (!p) return;
-    const audio = new Audio(convertFileSrc(p));
-    audio.volume = 1;
-    audio.play().catch(console.error);
-  }
-
-  function shortPath(p: string | null): string {
-    if (!p) return "—";
-    const parts = p.split(/[/\\]/);
-    return parts[parts.length - 1] ?? p;
+    // Resolve mit Fallback: Level-Sound → globaler UP → Default-UP
+    previewAudio(soundUrlForLevel(idx, cfg, "up"), cfg.volumeDb);
   }
 </script>
 
-<h2>Geschenke & Sounds pro Level</h2>
-<p class="hint">
-  Pro Level lässt sich ein Bild (Geschenk-Icon) und ein Sound einstellen. Der Sound
-  spielt, wenn das Level erreicht wird. Falls kein Sound gesetzt ist, wird der
-  globale Up/Down-Sound aus dem Audio-Tab genutzt.
-</p>
+<SectionHeader
+  title="Level-Assets"
+  description="Bild (Geschenk-Icon) und Sound pro Level. Wenn kein Sound gesetzt ist, wird der Fallback-Sound aus dem Audio-Tab verwendet."
+/>
 
-<div class="levels-grid">
+<div class="grid">
   {#each cfg.levels as slot, idx}
     {@const level = idx + 1}
-    <div class="level-card">
-      <div class="level-header">Level {level}KMH</div>
-      <div class="level-row">
-        <div class="preview">
-          {#if previewUrl(idx)}
-            <img src={previewUrl(idx)} alt="Level {level}" />
-          {:else}
-            <span class="placeholder">kein Bild</span>
-          {/if}
-        </div>
-        <div class="controls">
-          <div class="control-block">
-            <label>Bild</label>
-            <div class="file-row">
-              <span class="filename" title={slot.imagePath ?? ""}>{shortPath(slot.imagePath)}</span>
-              <button on:click={() => pickImage(idx)}>📁</button>
-              {#if slot.imagePath}
-                <button on:click={() => clearImage(idx)}>✕</button>
-              {/if}
-            </div>
-          </div>
-          <div class="control-block">
-            <label>Sound</label>
-            <div class="file-row">
-              <span class="filename" title={slot.soundPath ?? ""}>{shortPath(slot.soundPath)}</span>
-              <button on:click={() => pickSound(idx)}>📁</button>
-              {#if slot.soundPath}
-                <button on:click={() => playPreview(idx)}>▶</button>
-                <button on:click={() => clearSound(idx)}>✕</button>
-              {/if}
-            </div>
-          </div>
-        </div>
+    {@const url = previewUrl(idx)}
+    <div class="row">
+      <div class="thumb">
+        {#if url}
+          <img src={url} alt="Level {level}" />
+        {:else}
+          <span class="empty">∅</span>
+        {/if}
+      </div>
+
+      <div class="label">
+        <span class="level-num">{level}</span>
+        <span class="level-unit">KMH</span>
+      </div>
+
+      <div class="pickers">
+        <FilePicker
+          bind:value={slot.imagePath}
+          placeholder="Default-Bild"
+          filters={imgFilters}
+        />
+        <FilePicker
+          bind:value={slot.soundPath}
+          placeholder="Fallback nutzen"
+          filters={sndFilters}
+          onPlay={() => playPreview(idx)}
+        />
       </div>
     </div>
   {/each}
 </div>
 
 <style>
-  h2 {
-    font-size: 14px;
-    margin-bottom: 4px;
-    font-family: system-ui, sans-serif;
-  }
-  .hint {
-    font-size: 11px;
-    color: #aaa;
-    margin-bottom: 12px;
-    line-height: 1.4;
-  }
-  .levels-grid {
+  .grid {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--sp-2);
   }
-  .level-card {
-    background: rgba(255, 255, 255, 0.04);
-    border-radius: 6px;
-    padding: 8px;
-  }
-  .level-header {
-    font-size: 12px;
-    font-weight: bold;
-    margin-bottom: 6px;
-    color: #ddd;
-  }
-  .level-row {
-    display: flex;
-    gap: 10px;
+  .row {
+    display: grid;
+    grid-template-columns: 56px 64px 1fr;
     align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-2);
+    background: var(--c-bg-2);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-md);
   }
-  .preview {
+  .thumb {
     width: 48px;
     height: 48px;
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: 4px;
+    background: var(--c-bg-0);
+    border-radius: var(--r-sm);
     display: flex;
     align-items: center;
     justify-content: center;
-    flex-shrink: 0;
     overflow: hidden;
+    margin: 0 auto;
   }
-  .preview img {
+  .thumb img {
     width: 100%;
     height: 100%;
     object-fit: contain;
   }
-  .placeholder {
-    font-size: 9px;
-    color: #666;
-    text-align: center;
+  .empty {
+    color: var(--c-text-dim);
+    font-size: 20px;
   }
-  .controls {
-    flex: 1;
+  .label {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+  .level-num {
+    font-family: var(--font-display);
+    font-size: var(--fs-xl);
+    color: var(--c-text);
+  }
+  .level-unit {
+    font-size: var(--fs-xs);
+    color: var(--c-text-muted);
+    letter-spacing: 0.5px;
+  }
+  .pickers {
     display: flex;
     flex-direction: column;
     gap: 4px;
-  }
-  .control-block {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  label {
-    font-size: 10px;
-    color: #aaa;
-    width: 40px;
-    flex-shrink: 0;
-  }
-  .file-row {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    flex: 1;
     min-width: 0;
-  }
-  .filename {
-    flex: 1;
-    font-size: 11px;
-    color: #ccc;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    background: rgba(0, 0, 0, 0.25);
-    padding: 3px 6px;
-    border-radius: 3px;
-    min-width: 0;
-  }
-  button {
-    background: #2a2a30;
-    color: #ddd;
-    border: none;
-    border-radius: 3px;
-    padding: 3px 8px;
-    font-size: 11px;
-    cursor: pointer;
-  }
-  button:hover {
-    background: #3a3a42;
   }
 </style>
