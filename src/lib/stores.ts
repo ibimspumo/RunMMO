@@ -43,13 +43,17 @@ export function streamHpDeathSoundUrl(cfg: AppSettings): string {
 
 export const settingsOpen: Writable<boolean> = writable(false);
 
-// Hilfsfunktionen: Asset-Pfade in URLs umwandeln
+// Hilfsfunktionen: Asset-Pfade in URLs umwandeln.
+// imagePath-Format: null = Default | "gift:<key>" = Bibliothek | sonst = User-Pfad
 export function imageUrlForLevel(
   level0: number,
   cfg: AppSettings,
 ): string | null {
   const slot = cfg.levels[level0];
-  if (slot?.imagePath) return convertFileSrc(slot.imagePath);
+  if (slot?.imagePath) {
+    if (slot.imagePath.startsWith("gift:")) return resolveGiftIcon(slot.imagePath);
+    return convertFileSrc(slot.imagePath);
+  }
   return DEFAULT_GIFT_URLS[level0] ?? null;
 }
 

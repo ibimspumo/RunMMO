@@ -1,21 +1,12 @@
 <script lang="ts">
-  import { convertFileSrc } from "@tauri-apps/api/core";
   import type { AppSettings } from "../../types";
-  import { DEFAULT_GIFT_URLS } from "../../defaults";
-  import { FilePicker, SectionHeader } from "../../ui";
-  import { soundUrlForLevel } from "../../stores";
+  import { FilePicker, GiftPicker, SectionHeader } from "../../ui";
+  import { imageUrlForLevel, soundUrlForLevel } from "../../stores";
   import { previewAudio } from "../../ui/audio-preview";
 
   export let cfg: AppSettings;
 
-  const imgFilters = [{ name: "Bilder", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"] }];
   const sndFilters = [{ name: "Audio", extensions: ["mp3", "wav", "ogg", "m4a", "flac"] }];
-
-  function previewUrl(idx: number): string | null {
-    const p = cfg.levels[idx].imagePath;
-    if (p) return convertFileSrc(p);
-    return DEFAULT_GIFT_URLS[idx] ?? null;
-  }
 
   function playPreview(idx: number) {
     // Resolve mit Fallback: Level-Sound → globaler UP → Default-UP
@@ -25,13 +16,13 @@
 
 <SectionHeader
   title="Level-Assets"
-  description="Bild (Geschenk-Icon) und Sound pro Level. Wenn kein Sound gesetzt ist, wird der Fallback-Sound aus dem Audio-Tab verwendet."
+  description="Bild (Geschenk-Icon) und Sound pro Level. Bild aus der TikTok-Gift-Bibliothek wählen oder eigenes Bild hochladen. Wenn kein Sound gesetzt ist, wird der Fallback-Sound aus dem Audio-Tab verwendet."
 />
 
 <div class="grid">
   {#each cfg.levels as slot, idx}
     {@const level = idx + 1}
-    {@const url = previewUrl(idx)}
+    {@const url = imageUrlForLevel(idx, cfg)}
     <div class="row">
       <div class="thumb">
         {#if url}
@@ -47,10 +38,12 @@
       </div>
 
       <div class="pickers">
-        <FilePicker
-          bind:value={slot.imagePath}
-          placeholder="Default-Bild"
-          filters={imgFilters}
+        <GiftPicker
+          value={slot.imagePath}
+          on:change={(e) => {
+            slot.imagePath = e.detail;
+            cfg.levels = cfg.levels;
+          }}
         />
         <FilePicker
           bind:value={slot.soundPath}
