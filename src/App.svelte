@@ -28,6 +28,7 @@
     soundUrlForLevel,
     streamHpDeathSoundUrl,
     streamHpReviveSoundUrl,
+    streamHpExtraLifeLostSoundUrl,
     triggerHeal,
     triggerDamage,
     triggerSkill,
@@ -220,6 +221,11 @@
       ? cfg.streamHpExtraLifeReviveSoundVolumeDb
       : 0;
     playPooled(streamHpReviveSoundUrl(cfg), cfg.volumeDb + off, "heal");
+  }
+  function playExtraLifeLostSound() {
+    const url = streamHpExtraLifeLostSoundUrl(cfg);
+    if (!url) return;
+    playPooled(url, cfg.volumeDb + cfg.streamHpExtraLifeLostSoundVolumeDb, "heal");
   }
 
   // Heal/Damage liegen in stores.ts, damit Webhooks und die Test-Buttons
@@ -556,7 +562,8 @@
         // Entfernt N Extraleben vom Stack (kein-op, wenn keins vorhanden).
         // HP bleibt unangetastet — anders als der Death-Revive in HpBar-Watch.
         const n = Math.max(1, Math.floor(eff.level ?? 1));
-        removeExtraLives(n);
+        const removed = removeExtraLives(n);
+        if (removed > 0) playExtraLifeLostSound();
         break;
       }
       case "none":

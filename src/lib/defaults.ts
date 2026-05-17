@@ -178,6 +178,8 @@ export function defaultSettings(): AppSettings {
     streamHpExtraLifeHeartOffsetY: 6,
     streamHpExtraLifeReviveSoundPath: null,
     streamHpExtraLifeReviveSoundVolumeDb: 0,
+    streamHpExtraLifeLostSoundPath: null,
+    streamHpExtraLifeLostSoundVolumeDb: 0,
 
     skills: [exampleHealSkill()],
     skillsSimple: [],

@@ -48,6 +48,11 @@ export function streamHpReviveSoundUrl(cfg: AppSettings): string | null {
   return resolveSoundUrl(cfg, cfg.streamHpExtraLifeReviveSoundPath);
 }
 
+// Sound beim Verlieren eines Extralebens (consumeExtraLife-Skill): optional.
+export function streamHpExtraLifeLostSoundUrl(cfg: AppSettings): string | null {
+  return resolveSoundUrl(cfg, cfg.streamHpExtraLifeLostSoundPath);
+}
+
 // ===== Extraleben (Runtime, nicht persistiert) =====
 // Wird durch den `extraLife`-Skill-Effekt aufgebaut; bei HP=0 verbraucht der
 // Watch in App.svelte ein Leben und füllt HP auf `extraLifeReviveHpPct` Prozent.
@@ -283,6 +288,12 @@ export async function loadSettings(): Promise<void> {
     );
     merged.streamHpExtraLifeReviveSoundVolumeDb = migrateVolumeDb(
       merged.streamHpExtraLifeReviveSoundVolumeDb,
+    );
+    merged.streamHpExtraLifeLostSoundPath = migrateSoundRef(
+      merged.streamHpExtraLifeLostSoundPath,
+    );
+    merged.streamHpExtraLifeLostSoundVolumeDb = migrateVolumeDb(
+      merged.streamHpExtraLifeLostSoundVolumeDb,
     );
     if (Array.isArray(merged.levels)) {
       merged.levels = merged.levels.map((lv) => ({

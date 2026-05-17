@@ -211,6 +211,24 @@
   </Field>
 </Card>
 
+<Card
+  title="Extraleben"
+  hint="Sound, der gespielt wird, wenn ein Extraleben durch den „Extraleben wegnehmen“-Skill vom Stack entfernt wird. Der Revive-Sound (Einlösen bei HP=0) wird im Stream-HP-Tab konfiguriert."
+>
+  <Field
+    label="Herz-verloren-Sound"
+    hint="Optional. Wird nur abgespielt, wenn tatsächlich ein Herz entfernt wurde."
+  >
+    <SoundPicker
+      value={cfg.streamHpExtraLifeLostSoundPath}
+      placeholder="Kein Sound"
+      volumeDb={cfg.streamHpExtraLifeLostSoundVolumeDb}
+      on:change={(e) => (cfg.streamHpExtraLifeLostSoundPath = e.detail)}
+      on:volumeChange={(e) => (cfg.streamHpExtraLifeLostSoundVolumeDb = e.detail)}
+    />
+  </Field>
+</Card>
+
 <style>
   .test-row {
     display: flex;

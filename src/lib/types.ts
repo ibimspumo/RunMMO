@@ -202,6 +202,10 @@ export interface AppSettings {
   streamHpExtraLifeHeartOffsetY: number;  // px Abstand nach oben vom HP-Balken
   streamHpExtraLifeReviveSoundPath: SoundRef; // optional: Sound beim Einlösen
   streamHpExtraLifeReviveSoundVolumeDb: number;
+  // Sound, der gespielt wird, wenn ein Extraleben durch den
+  // `consumeExtraLife`-Skill-Effekt vom Stack entfernt wird (ohne Revive).
+  streamHpExtraLifeLostSoundPath: SoundRef;
+  streamHpExtraLifeLostSoundVolumeDb: number;
 
   // Skills für den MMO-Modus. Liste von Webhook-getriggerten Effekten mit
   // Bedingungen, Regeln und optionaler Wahrscheinlichkeit. Webhook:
