@@ -22,6 +22,10 @@ export interface LevelAssets {
   // Wenn null → Default-Asset für dieses Level verwenden (falls vorhanden)
   imagePath: string | null;
   soundPath: SoundRef;
+  // Offset zur Master-Lautstärke in dB für diesen Slot. 0 = unverändert.
+  // Wird nur angewendet, wenn der Slot einen eigenen Sound hat — sonst
+  // greifen die Fallback-Up/Down-Offsets.
+  soundVolumeDb: number;
 }
 
 export type AppMode = "simple" | "mmo";
@@ -49,7 +53,9 @@ export interface AppSettings {
   soundLibrary: SoundEntry[];
   // Optional globale Up/Down Sounds (legacy aus Godot); spielen falls Level-Sound leer
   fallbackUpSoundPath: SoundRef;
+  fallbackUpSoundVolumeDb: number;
   fallbackDownSoundPath: SoundRef;
+  fallbackDownSoundVolumeDb: number;
 
   // Timer
   levelDurationSeconds: number;
@@ -143,8 +149,11 @@ export interface AppSettings {
   streamHpSecondsPerHpByLevel: number[];// 12 Werte: Sekunden pro -1 HP je KMH-Level
   streamHpShowDecayRate: boolean;       // aktuelle Drain-Rate unter dem Balken anzeigen
   streamHpDeathSoundPath: SoundRef;// optional: eigener Death-Sound
+  streamHpDeathSoundVolumeDb: number;
   streamHpHealSoundPath: SoundRef; // Sound bei /heal
+  streamHpHealSoundVolumeDb: number;
   streamHpDamageSoundPath: SoundRef;// Sound bei /damage
+  streamHpDamageSoundVolumeDb: number;
   streamHpFillColor: RGBA;
   streamHpBgColor: RGBA;
   streamHpBorderColor: RGBA;
@@ -181,6 +190,7 @@ export interface AppSettings {
   streamHpExtraLifeHeartGap: number;      // px Abstand zwischen Herzen
   streamHpExtraLifeHeartOffsetY: number;  // px Abstand nach oben vom HP-Balken
   streamHpExtraLifeReviveSoundPath: SoundRef; // optional: Sound beim Einlösen
+  streamHpExtraLifeReviveSoundVolumeDb: number;
 
   // Skills (nur MMO-Modus). Liste von Webhook-getriggerten Effekten mit
   // Bedingungen, Regeln und optionaler Wahrscheinlichkeit. Webhook:
@@ -212,6 +222,11 @@ export interface AppSettings {
   wheelY: number;
   wheelSize: number;          // Durchmesser
   wheelSpinDurationMs: number;
+  // Tick-Sound, der beim Vorbeilaufen des Pointers an einer Sektor-Grenze
+  // (Segments) bzw. an einem Speichen-Tick (Chance) abgespielt wird. Wird
+  // dynamisch per Web Audio erzeugt (keine Datei nötig). 0 = aus.
+  // Skala 0..100, multipliziert mit dem Master-Volume (volumeDb).
+  wheelTickVolume: number;
 
   // Globale Optik der Skill-Slot-Texte. Drei feste Elemente pro Slot:
   //  - Icon (Mitte, immer)
@@ -352,6 +367,10 @@ export interface SkillEffect {
   //   effect.soundPath  >  wheelSegment.soundPath  >  skill.soundPath  >  ∅
   // null = kein Override (es greift der nächsthöhere in der Kaskade).
   soundPath: SoundRef;
+  // Offset zur Master-Lautstärke in dB, gilt nur wenn dieser Effekt seinen
+  // eigenen Sound liefert (also soundPath gesetzt ist). Sonst greift der
+  // Offset des nächsthöheren Cascade-Members (Segment/Skill).
+  soundVolumeDb: number;
 }
 
 // Ein Sektor des Glücksrads als Action. Wahrscheinlichkeiten werden vom System
@@ -366,6 +385,9 @@ export interface WheelSegment {
   // Sound, der einmal beim "Sektor-Treffer" abgespielt wird (Stufe zwischen
   // Skill- und Effekt-Sound). null = Skill-Sound greift (oder kein Sound).
   soundPath: SoundRef;
+  // Offset für den Segment-Sound. Greift nur, wenn das Segment auch
+  // einen eigenen soundPath liefert.
+  soundVolumeDb: number;
 }
 
 // Globaler Text-Stil für die zwei festen Text-Elemente auf jedem Skill-Slot
@@ -416,6 +438,15 @@ export interface SkillRule {
   conditions: ConditionGroup[];
   effects: SkillEffect[];
   probability: number;  // 0..100; 100 = immer, < 100 = Rad
+  // Sounds für den Chance-Roll (nur relevant wenn probability < 100). Werden
+  // EINMAL pro Roll am Ende des Spins gespielt, parallel zur Effekt-Kaskade:
+  //  - Erfolg → successSoundPath (zusätzlich zu Effekt-Sounds)
+  //  - Fehlschlag → failureSoundPath
+  // null = kein Sound. Bei probability == 100 werden beide ignoriert.
+  successSoundPath: SoundRef;
+  successSoundVolumeDb: number;
+  failureSoundPath: SoundRef;
+  failureSoundVolumeDb: number;
 }
 
 export interface Skill {
@@ -438,6 +469,8 @@ export interface Skill {
   // ein Effekt feuert, sofern weder Effekt noch Wheel-Segment einen
   // eigenen Sound vorgeben (siehe Kaskade an SkillEffect.soundPath).
   soundPath: SoundRef;
+  // Offset für den Skill-Sound (greift nur wenn soundPath gesetzt ist).
+  soundVolumeDb: number;
 }
 
 export interface LadderState {

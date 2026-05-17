@@ -30,12 +30,15 @@ export function defaultSettings(): AppSettings {
     levels: Array.from({ length: 12 }, () => ({
       imagePath: null,
       soundPath: null,
+      soundVolumeDb: 0,
     })),
 
     volumeDb: -20,
     soundLibrary: [],
     fallbackUpSoundPath: null,
+    fallbackUpSoundVolumeDb: 0,
     fallbackDownSoundPath: null,
+    fallbackDownSoundVolumeDb: 0,
 
     levelDurationSeconds: 120,
     showTimer: true,
@@ -128,8 +131,11 @@ export function defaultSettings(): AppSettings {
     streamHpSecondsPerHpByLevel: [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.25, 0.2, 0.15, 0.1],
     streamHpShowDecayRate: true,
     streamHpDeathSoundPath: null,
+    streamHpDeathSoundVolumeDb: 0,
     streamHpHealSoundPath: null,
+    streamHpHealSoundVolumeDb: 0,
     streamHpDamageSoundPath: null,
+    streamHpDamageSoundVolumeDb: 0,
     streamHpFillColor: c(0.15, 0.85, 0.25),
     streamHpBgColor: c(0.08, 0.08, 0.08, 0.85),
     streamHpBorderColor: c(0, 0, 0, 1),
@@ -161,6 +167,7 @@ export function defaultSettings(): AppSettings {
     streamHpExtraLifeHeartGap: 4,
     streamHpExtraLifeHeartOffsetY: 6,
     streamHpExtraLifeReviveSoundPath: null,
+    streamHpExtraLifeReviveSoundVolumeDb: 0,
 
     skills: [exampleHealSkill()],
 
@@ -176,6 +183,7 @@ export function defaultSettings(): AppSettings {
     wheelY: 220,
     wheelSize: 300,
     wheelSpinDurationMs: 2200,
+    wheelTickVolume: 60,
 
     skillValueText: {
       enabled: true,
@@ -309,6 +317,7 @@ function effect(
     segments: [],
     label: "",
     soundPath: null,
+    soundVolumeDb: 0,
     ...patch,
   };
 }
@@ -325,23 +334,40 @@ export function exampleHealSkill(): import("./types").Skill {
     cooldownSec: 5,
     valueTextOverride: "",
     soundPath: null,
+    soundVolumeDb: 0,
     rules: [
-      {
+      ruleDef({
         conditions: [{ minKmh: 1, maxKmh: 3, minHpPct: null, maxHpPct: null, minExtraLives: null, maxExtraLives: null }],
         effects: [effect("heal", { amount: 250 })],
         probability: 100,
-      },
-      {
+      }),
+      ruleDef({
         conditions: [{ minKmh: 4, maxKmh: 7, minHpPct: null, maxHpPct: null, minExtraLives: null, maxExtraLives: null }],
         effects: [effect("heal", { amount: 150 })],
         probability: 80,
-      },
-      {
+      }),
+      ruleDef({
         conditions: [{ minKmh: 8, maxKmh: 12, minHpPct: null, maxHpPct: null, minExtraLives: null, maxExtraLives: null }],
         effects: [effect("heal", { amount: 75 })],
         probability: 50,
-      },
+      }),
     ],
+  };
+}
+
+// Hilfs-Helfer für Rule-Defaults inkl. der neuen optionalen Sound-Felder.
+function ruleDef(
+  patch: Partial<import("./types").SkillRule>,
+): import("./types").SkillRule {
+  return {
+    conditions: [],
+    effects: [],
+    probability: 100,
+    successSoundPath: null,
+    successSoundVolumeDb: 0,
+    failureSoundPath: null,
+    failureSoundVolumeDb: 0,
+    ...patch,
   };
 }
 

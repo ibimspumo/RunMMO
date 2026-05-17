@@ -28,9 +28,20 @@
     { method: "GET", path: "/damage?amount=X", desc: "Stream-HP −X (MMO-Modus). Default X=100." },
   ];
 
-  async function copy(text: string) {
+  // Welche Basis-URL beim Kopieren ganzer Endpunkte verwendet wird.
+  let copyBase: "local" | "lan" = "local";
+  $: if (copyBase === "lan" && !networkUrl) copyBase = "local";
+  $: activeBaseUrl = copyBase === "lan" && networkUrl ? networkUrl : localhostUrl;
+
+  let copiedKey: string | null = null;
+  let copyResetTimer: ReturnType<typeof setTimeout> | null = null;
+
+  async function copy(text: string, key: string) {
     try {
       await navigator.clipboard.writeText(text);
+      copiedKey = key;
+      if (copyResetTimer) clearTimeout(copyResetTimer);
+      copyResetTimer = setTimeout(() => (copiedKey = null), 1200);
     } catch (e) {
       console.warn(e);
     }
@@ -72,13 +83,17 @@
   <div class="url-row">
     <span class="url-label">Localhost</span>
     <code>{localhostUrl}</code>
-    <button class="copy" on:click={() => copy(localhostUrl)} title="Kopieren">⧉</button>
+    <button class="copy" on:click={() => copy(localhostUrl, "base-local")} title="Basis-URL kopieren">
+      {copiedKey === "base-local" ? "✓" : "⧉"}
+    </button>
   </div>
   {#if networkUrl}
     <div class="url-row">
       <span class="url-label">Netzwerk</span>
       <code>{networkUrl}</code>
-      <button class="copy" on:click={() => copy(networkUrl)} title="Kopieren">⧉</button>
+      <button class="copy" on:click={() => copy(networkUrl, "base-lan")} title="Basis-URL kopieren">
+        {copiedKey === "base-lan" ? "✓" : "⧉"}
+      </button>
     </div>
   {:else if cfg.webhookEnabled}
     <p class="hint-text">Aktiviere „Auf allen Netzwerk-Interfaces lauschen" für eine Netzwerk-URL.</p>
@@ -86,12 +101,34 @@
 </Card>
 
 <Card title="Endpunkte">
+  {#if networkUrl}
+    <div class="base-toggle">
+      <span class="base-toggle-label">Kopier-Basis:</span>
+      <label class="base-chip" class:active={copyBase === "local"}>
+        <input type="radio" bind:group={copyBase} value="local" />
+        <span>Localhost</span>
+      </label>
+      <label class="base-chip" class:active={copyBase === "lan"}>
+        <input type="radio" bind:group={copyBase} value="lan" />
+        <span>Netzwerk</span>
+      </label>
+    </div>
+  {/if}
+
   <ul class="endpoints">
     {#each endpoints as e}
+      {@const fullUrl = activeBaseUrl + e.path}
       <li>
         <div class="ep-head">
-          <span class="method">{e.method}</span>
-          <code class="path">{e.path}</code>
+          <div class="ep-scroll">
+            <span class="method">{e.method}</span>
+            <code class="path">{fullUrl}</code>
+          </div>
+          <button
+            class="copy"
+            on:click={() => copy(fullUrl, "ep-" + e.path)}
+            title="Komplette URL kopieren"
+          >{copiedKey === "ep-" + e.path ? "✓" : "⧉"}</button>
         </div>
         <p class="ep-desc">{e.desc}</p>
       </li>
@@ -179,6 +216,47 @@
     background: var(--c-bg-4);
     color: var(--c-text);
   }
+  .base-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-3);
+    flex-wrap: wrap;
+  }
+  .base-toggle-label {
+    font-size: var(--fs-xs);
+    color: var(--c-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .base-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--c-bg-2);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-sm);
+    padding: 4px 10px;
+    font-size: var(--fs-xs);
+    color: var(--c-text);
+    cursor: pointer;
+    transition: background var(--duration), border-color var(--duration);
+  }
+  .base-chip:hover {
+    background: var(--c-bg-3);
+  }
+  .base-chip.active {
+    background: var(--c-accent-soft, rgba(56, 189, 248, 0.18));
+    border-color: var(--c-accent);
+    color: var(--c-accent);
+  }
+  .base-chip input {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 0;
+    height: 0;
+    margin: 0;
+  }
   .hint-text {
     font-size: var(--fs-xs);
     color: var(--c-text-muted);
@@ -202,12 +280,18 @@
     display: flex;
     align-items: center;
     gap: var(--sp-2);
+  }
+  .ep-scroll {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex: 1;
+    min-width: 0;
     overflow-x: auto;
-    /* Auf schmalen Screens: URL bleibt vollständig sichtbar via Scroll */
     scrollbar-width: thin;
   }
-  .ep-head::-webkit-scrollbar { height: 4px; }
-  .ep-head::-webkit-scrollbar-thumb { background: var(--c-bg-3); border-radius: 2px; }
+  .ep-scroll::-webkit-scrollbar { height: 4px; }
+  .ep-scroll::-webkit-scrollbar-thumb { background: var(--c-bg-3); border-radius: 2px; }
   .method {
     font-family: var(--font-mono);
     font-size: var(--fs-xs);

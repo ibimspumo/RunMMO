@@ -40,8 +40,13 @@
         <SoundPicker
           value={slot.soundPath}
           placeholder="Fallback nutzen"
+          volumeDb={slot.soundVolumeDb}
           on:change={(e) => {
             slot.soundPath = e.detail;
+            cfg.levels = cfg.levels;
+          }}
+          on:volumeChange={(e) => {
+            slot.soundVolumeDb = e.detail;
             cfg.levels = cfg.levels;
           }}
         />

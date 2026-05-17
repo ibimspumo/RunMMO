@@ -76,7 +76,9 @@
     <SoundPicker
       value={cfg.streamHpDeathSoundPath}
       placeholder="Default (down.mp3)"
+      volumeDb={cfg.streamHpDeathSoundVolumeDb}
       on:change={(e) => (cfg.streamHpDeathSoundPath = e.detail)}
+      on:volumeChange={(e) => (cfg.streamHpDeathSoundVolumeDb = e.detail)}
     />
   </Field>
 </Card>
@@ -89,7 +91,9 @@
     <SoundPicker
       value={cfg.streamHpHealSoundPath}
       placeholder="Kein Sound"
+      volumeDb={cfg.streamHpHealSoundVolumeDb}
       on:change={(e) => (cfg.streamHpHealSoundPath = e.detail)}
+      on:volumeChange={(e) => (cfg.streamHpHealSoundVolumeDb = e.detail)}
     />
   </Field>
 
@@ -97,7 +101,9 @@
     <SoundPicker
       value={cfg.streamHpDamageSoundPath}
       placeholder="Kein Sound"
+      volumeDb={cfg.streamHpDamageSoundVolumeDb}
       on:change={(e) => (cfg.streamHpDamageSoundPath = e.detail)}
+      on:volumeChange={(e) => (cfg.streamHpDamageSoundVolumeDb = e.detail)}
     />
   </Field>
 
@@ -128,7 +134,9 @@
     <SoundPicker
       value={cfg.streamHpExtraLifeReviveSoundPath}
       placeholder="Kein Sound"
+      volumeDb={cfg.streamHpExtraLifeReviveSoundVolumeDb}
       on:change={(e) => (cfg.streamHpExtraLifeReviveSoundPath = e.detail)}
+      on:volumeChange={(e) => (cfg.streamHpExtraLifeReviveSoundVolumeDb = e.detail)}
     />
   </Field>
 

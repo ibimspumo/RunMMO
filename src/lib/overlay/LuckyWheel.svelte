@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from "svelte";
-  import type { AppSettings, SkillEffect, WheelSegment } from "../types";
+  import type { AppSettings, SkillEffect, SoundRef, WheelSegment } from "../types";
   import { rgbaToCss } from "../defaults";
   import {
     wheelSpin,
@@ -8,6 +8,9 @@
     maybeStartNextSpin,
     emitSkillFire,
   } from "../stores";
+  import { resolveSoundUrl } from "../sound-library";
+  import { playPooled } from "../audio-pool";
+  import { playWheelTick } from "../wheel-tick-audio";
 
   export let cfg: AppSettings;
   export let editMode = false;
@@ -38,6 +41,10 @@
     success: boolean;
     skillId: number;
     effects: SkillEffect[];
+    successSoundPath: SoundRef;
+    successSoundVolumeDb: number;
+    failureSoundPath: SoundRef;
+    failureSoundVolumeDb: number;
   };
   type SegmentSpin = {
     mode: "segments";
@@ -107,14 +114,139 @@
 
   let resultClearTimeout: number | null = null;
   let spinEndTimeout: number | null = null;
+  let tickRafId: number | null = null;
+
+  // Cubic-Bezier-Solver — muss EXAKT zur CSS-Transition unten passen
+  // ("cubic-bezier(0.18, 0.95, 0.22, 1)"), sonst driften die Ticks gegen die
+  // sichtbare Rotation. Newton-Raphson auf der X-Komponente.
+  const BEZ_X1 = 0.18;
+  const BEZ_Y1 = 0.95;
+  const BEZ_X2 = 0.22;
+  const BEZ_Y2 = 1.0;
+  function bez(t: number, p1: number, p2: number): number {
+    const c = 3 * p1;
+    const b = 3 * (p2 - p1) - c;
+    const a = 1 - c - b;
+    return ((a * t + b) * t + c) * t;
+  }
+  function bezDeriv(t: number, p1: number, p2: number): number {
+    const c = 3 * p1;
+    const b = 3 * (p2 - p1) - c;
+    const a = 1 - c - b;
+    return (3 * a * t + 2 * b) * t + c;
+  }
+  function easeProgress(x: number): number {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    let t = x;
+    for (let i = 0; i < 8; i++) {
+      const dx = bez(t, BEZ_X1, BEZ_X2) - x;
+      if (Math.abs(dx) < 1e-6) break;
+      const d = bezDeriv(t, BEZ_X1, BEZ_X2);
+      if (Math.abs(d) < 1e-6) break;
+      t = t - dx / d;
+    }
+    return bez(t, BEZ_Y1, BEZ_Y2);
+  }
+
+  // Sektor-Grenzen (in Grad, 0..360) sammeln. Für die Tick-Logik bilden wir
+  // alle Crossings im Bereich [0, targetRotation] vor. Wir tracken den Index
+  // des nächsten anstehenden Crossings — kein Modulo-Wraparound nötig.
+  function buildCrossings(spin: ActiveSpin, targetRotation: number): number[] {
+    // Boundaries des Rads in 0..360 (am Rad selbst, ohne Rotation).
+    let boundaries: number[] = [];
+    if (spin.mode === "segments") {
+      const total = spin.segments.reduce(
+        (a, s) => a + (Number.isFinite(s.weight) && s.weight > 0 ? s.weight : 0),
+        0,
+      );
+      if (total > 0) {
+        let acc = 0;
+        for (let i = 0; i < spin.segments.length; i++) {
+          const w =
+            Number.isFinite(spin.segments[i].weight) && spin.segments[i].weight > 0
+              ? spin.segments[i].weight
+              : 0;
+          boundaries.push((acc / total) * 360);
+          acc += w;
+        }
+      }
+    } else {
+      // Chance-Modus: 24 gleichmäßige Speichen — passt zum visuellen Look.
+      for (let i = 0; i < 24; i++) boundaries.push(i * 15);
+    }
+    if (boundaries.length === 0) return [];
+
+    // Pointer steht oben (0°). Eine Boundary B des Rads erscheint am Pointer,
+    // wenn currentRotation ≡ (360 - B) mod 360. Wir entwickeln alle Crossings
+    // im Bereich (0, targetRotation] in aufsteigender Reihenfolge.
+    const out: number[] = [];
+    const turns = Math.ceil(targetRotation / 360) + 1;
+    for (let k = 0; k < turns; k++) {
+      for (const b of boundaries) {
+        const r = ((360 - b) % 360) + k * 360;
+        if (r > 0 && r <= targetRotation) out.push(r);
+      }
+    }
+    out.sort((a, b) => a - b);
+    return out;
+  }
+
+  function startTickLoop(spin: ActiveSpin, targetRotation: number, durationMs: number) {
+    if (tickRafId !== null) cancelAnimationFrame(tickRafId);
+    if (cfg.wheelTickVolume <= 0 || durationMs <= 0 || targetRotation <= 0) return;
+
+    const crossings = buildCrossings(spin, targetRotation);
+    if (crossings.length === 0) return;
+
+    let next = 0;
+    const t0 = performance.now();
+    const tick = (now: number) => {
+      const progress = Math.max(0, Math.min(1, (now - t0) / durationMs));
+      const eased = easeProgress(progress);
+      const curRot = eased * targetRotation;
+      while (next < crossings.length && curRot >= crossings[next]) {
+        // pitchHint: 0 am Anfang (1600 Hz), 1 zum Ende (2200 Hz) — fühlt sich
+        // an wie ein klassisches Glücksrad, das hochfrequent „spannender" tickt.
+        playWheelTick(cfg.volumeDb, cfg.wheelTickVolume, progress);
+        next++;
+      }
+      if (progress >= 1 || next >= crossings.length) {
+        tickRafId = null;
+        return;
+      }
+      tickRafId = requestAnimationFrame(tick);
+    };
+    tickRafId = requestAnimationFrame(tick);
+  }
+
+  // Rule-Level-Sound für den Chance-Spin: einmal pro Roll, am Ende der
+  // Animation, abhängig vom Ergebnis. Läuft parallel zur Effekt-Kaskade.
+  function playRuleResultSound(spin: ChanceSpin) {
+    const ref = spin.success ? spin.successSoundPath : spin.failureSoundPath;
+    const offset = spin.success
+      ? spin.successSoundVolumeDb
+      : spin.failureSoundVolumeDb;
+    if (!ref) return;
+    const url = resolveSoundUrl(cfg, ref);
+    if (url) playPooled(url, cfg.volumeDb + offset, "skill");
+  }
 
   function applyResultEffects(spin: ActiveSpin) {
     if (spin.mode === "chance") {
+      // Rule-Sound IMMER spielen (auch bei Fehlschlag) — Erfolgs-Sound darf
+      // zusätzlich zu den Effekt-Sounds laufen.
+      playRuleResultSound(spin);
       if (spin.success) emitSkillFire(spin.skillId, spin.effects);
     } else {
       const seg = spin.segments[spin.winningIndex];
       if (seg && seg.effects.length > 0) {
-        emitSkillFire(spin.skillId, seg.effects, seg.soundPath);
+        emitSkillFire(
+          spin.skillId,
+          seg.effects,
+          seg.soundPath,
+          seg.soundVolumeDb,
+        );
       }
     }
   }
@@ -140,11 +272,13 @@
 
     // Phase 2: Ziel-Rotation mit voller Spin-Dauer.
     transitionMs = cfg.wheelSpinDurationMs;
-    rotation =
+    const target =
       spin.mode === "chance"
         ? pickChanceTargetRotation(spin.chance, spin.success)
         : pickSegmentTargetRotation(spin.segments, spin.winningIndex);
+    rotation = target;
     phase = { kind: "spinning", spin };
+    startTickLoop(spin, target, cfg.wheelSpinDurationMs);
 
     spinEndTimeout = window.setTimeout(() => {
       if (phase.kind !== "spinning") return;
@@ -173,6 +307,10 @@
       clearTimeout(spinEndTimeout);
       spinEndTimeout = null;
     }
+    if (tickRafId !== null) {
+      cancelAnimationFrame(tickRafId);
+      tickRafId = null;
+    }
     if (req.mode === "chance") {
       startSpin({
         mode: "chance",
@@ -180,6 +318,10 @@
         success: req.success,
         skillId: req.skillId,
         effects: req.effects,
+        successSoundPath: req.successSoundPath,
+        successSoundVolumeDb: req.successSoundVolumeDb,
+        failureSoundPath: req.failureSoundPath,
+        failureSoundVolumeDb: req.failureSoundVolumeDb,
       });
     } else {
       startSpin({
@@ -207,6 +349,7 @@
     window.removeEventListener("resize", updateSize);
     if (resultClearTimeout !== null) clearTimeout(resultClearTimeout);
     if (spinEndTimeout !== null) clearTimeout(spinEndTimeout);
+    if (tickRafId !== null) cancelAnimationFrame(tickRafId);
   });
 
   $: autoScale = windowWidth / REFERENCE_WIDTH;

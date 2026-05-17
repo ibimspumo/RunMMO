@@ -61,6 +61,7 @@
       segments: [],
       label: "",
       soundPath: null,
+      soundVolumeDb: 0,
     };
   }
 
@@ -93,9 +94,9 @@
         return {
           ...base,
           segments: [
-            { label: "Heal", color: { r: 0.13, g: 0.77, b: 0.37, a: 1 }, weight: 1, effects: [{ ...blankEffect("heal"), amount: 200 }], soundPath: null },
-            { label: "Damage", color: { r: 0.94, g: 0.27, b: 0.27, a: 1 }, weight: 1, effects: [{ ...blankEffect("damage"), amount: 100 }], soundPath: null },
-            { label: "Niete", color: { r: 0.4, g: 0.4, b: 0.45, a: 1 }, weight: 2, effects: [blankEffect("none")], soundPath: null },
+            { label: "Heal", color: { r: 0.13, g: 0.77, b: 0.37, a: 1 }, weight: 1, effects: [{ ...blankEffect("heal"), amount: 200 }], soundPath: null, soundVolumeDb: 0 },
+            { label: "Damage", color: { r: 0.94, g: 0.27, b: 0.27, a: 1 }, weight: 1, effects: [{ ...blankEffect("damage"), amount: 100 }], soundPath: null, soundVolumeDb: 0 },
+            { label: "Niete", color: { r: 0.4, g: 0.4, b: 0.45, a: 1 }, weight: 2, effects: [blankEffect("none")], soundPath: null, soundVolumeDb: 0 },
           ],
         };
       default:
@@ -139,7 +140,15 @@
   }
 
   function newRule(): SkillRule {
-    return { conditions: [], effects: [], probability: 100 };
+    return {
+      conditions: [],
+      effects: [],
+      probability: 100,
+      successSoundPath: null,
+      successSoundVolumeDb: 0,
+      failureSoundPath: null,
+      failureSoundVolumeDb: 0,
+    };
   }
 
   function newSkill(): Skill {
@@ -153,6 +162,7 @@
       cooldownSec: 0,
       valueTextOverride: "",
       soundPath: null,
+      soundVolumeDb: 0,
     };
   }
 
@@ -263,6 +273,7 @@
       weight: 1,
       effects: [blankEffect("none")],
       soundPath: null,
+      soundVolumeDb: 0,
     });
     bumpSkills();
   }
@@ -358,6 +369,27 @@
     return c;
   })();
   $: hasDuplicateIds = Object.values(idCounts).some((c) => c > 1);
+
+  // Copy-Helper: Komplette Webhook-URL für einen Skill in den Zwischenspeicher
+  // legen. Nutzt localhost + den aktuell konfigurierten Port (cfg.webhookPort).
+  function skillUrl(id: number): string {
+    return `http://127.0.0.1:${cfg.webhookPort}/skill?id=${id}`;
+  }
+
+  let copiedSkillId: number | null = null;
+  let copyResetTimer: ReturnType<typeof setTimeout> | null = null;
+
+  async function copySkillUrl(id: number, ev?: Event) {
+    ev?.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(skillUrl(id));
+      copiedSkillId = id;
+      if (copyResetTimer) clearTimeout(copyResetTimer);
+      copyResetTimer = setTimeout(() => (copiedSkillId = null), 1200);
+    } catch (e) {
+      console.warn(e);
+    }
+  }
 </script>
 
 <SectionHeader
@@ -407,6 +439,11 @@
 
       <div class="skill-actions">
         <button
+          class="mini-btn copy-btn"
+          on:click={(e) => copySkillUrl(skill.id, e)}
+          title={"Webhook-URL kopieren: " + skillUrl(skill.id)}
+        >{copiedSkillId === skill.id ? "✓" : "⧉"}</button>
+        <button
           class="mini-btn"
           on:click={() => moveSkill(sIdx, -1)}
           disabled={sIdx === 0}
@@ -450,11 +487,16 @@
           />
         </Field>
 
-        <Field
-          label="Skill-ID"
-          hint="Wird vom Webhook-Aufruf verwendet: /skill?id={skill.id}"
-        >
+        <Field label="Skill-ID">
           <NumberInput bind:value={skill.id} min={1} max={9999} />
+          <div class="skill-url-row">
+            <code class="skill-url">{skillUrl(skill.id)}</code>
+            <button
+              class="skill-url-copy"
+              on:click={(e) => copySkillUrl(skill.id, e)}
+              title="Komplette Webhook-URL kopieren"
+            >{copiedSkillId === skill.id ? "✓ Kopiert" : "⧉ Kopieren"}</button>
+          </div>
         </Field>
 
         <Field label="Icon" hint="Bibliothek mit allen Stil-Varianten — Klick zum Wechseln. Oder eigenes Bild hochladen.">
@@ -500,8 +542,13 @@
           <SoundPicker
             value={skill.soundPath}
             placeholder="Kein Sound"
+            volumeDb={skill.soundVolumeDb}
             on:change={(e) => {
               skill.soundPath = e.detail;
+              bumpSkills();
+            }}
+            on:volumeChange={(e) => {
+              skill.soundVolumeDb = e.detail;
               bumpSkills();
             }}
           />
@@ -921,8 +968,13 @@
                             <SoundPicker
                               value={seg.soundPath}
                               placeholder="Skill-Sound nutzen"
+                              volumeDb={seg.soundVolumeDb}
                               on:change={(e) => {
                                 seg.soundPath = e.detail;
+                                bumpSkills();
+                              }}
+                              on:volumeChange={(e) => {
+                                seg.soundVolumeDb = e.detail;
                                 bumpSkills();
                               }}
                             />
@@ -1084,8 +1136,13 @@
                       <SoundPicker
                         value={eff.soundPath}
                         placeholder="Skill-Sound nutzen"
+                        volumeDb={eff.soundVolumeDb}
                         on:change={(e) => {
                           eff.soundPath = e.detail;
+                          bumpSkills();
+                        }}
+                        on:volumeChange={(e) => {
+                          eff.soundVolumeDb = e.detail;
                           bumpSkills();
                         }}
                       />
@@ -1117,6 +1174,46 @@
                 suffix="%"
               />
             </Field>
+
+            {#if rule.probability < 100}
+              <Field
+                label="Sound bei Erfolg"
+                hint="Wird einmal beim Spin-Ende gespielt, wenn der Roll erfolgreich war. Läuft zusätzlich zu den Effekt-Sounds."
+              >
+                <SoundPicker
+                  value={rule.successSoundPath}
+                  placeholder="Kein Sound"
+                  volumeDb={rule.successSoundVolumeDb}
+                  on:change={(e) => {
+                    rule.successSoundPath = e.detail;
+                    bumpSkills();
+                  }}
+                  on:volumeChange={(e) => {
+                    rule.successSoundVolumeDb = e.detail;
+                    bumpSkills();
+                  }}
+                />
+              </Field>
+
+              <Field
+                label="Sound bei Fehlschlag"
+                hint="Wird einmal beim Spin-Ende gespielt, wenn der Roll fehlgeschlagen ist (keine Effekte feuern)."
+              >
+                <SoundPicker
+                  value={rule.failureSoundPath}
+                  placeholder="Kein Sound"
+                  volumeDb={rule.failureSoundVolumeDb}
+                  on:change={(e) => {
+                    rule.failureSoundPath = e.detail;
+                    bumpSkills();
+                  }}
+                  on:volumeChange={(e) => {
+                    rule.failureSoundVolumeDb = e.detail;
+                    bumpSkills();
+                  }}
+                />
+              </Field>
+            {/if}
           </div>
         {/each}
 
@@ -1259,6 +1356,50 @@
     background: var(--c-danger-soft);
     color: var(--c-danger);
     border-color: var(--c-danger);
+  }
+  .mini-btn.copy-btn:hover:not(:disabled) {
+    background: var(--c-accent-soft, rgba(56, 189, 248, 0.18));
+    color: var(--c-accent);
+    border-color: var(--c-accent);
+  }
+
+  .skill-url-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin-top: 6px;
+  }
+  .skill-url {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    color: var(--c-text-muted);
+    background: var(--c-bg-0);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-sm);
+    padding: 5px 8px;
+    white-space: nowrap;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .skill-url::-webkit-scrollbar { height: 4px; }
+  .skill-url::-webkit-scrollbar-thumb { background: var(--c-bg-3); border-radius: 2px; }
+  .skill-url-copy {
+    background: var(--c-bg-3);
+    border: 1px solid var(--c-border);
+    color: var(--c-text-muted);
+    border-radius: var(--r-sm);
+    padding: 5px 10px;
+    font-size: var(--fs-xs);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background var(--duration), color var(--duration), border-color var(--duration);
+  }
+  .skill-url-copy:hover {
+    background: var(--c-accent-soft, rgba(56, 189, 248, 0.18));
+    color: var(--c-accent);
+    border-color: var(--c-accent);
   }
 
   .skill-preview {

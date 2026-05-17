@@ -11,6 +11,7 @@
     SoundPicker,
   } from "../../ui";
   import { previewAudio } from "../../ui/audio-preview";
+  import { playWheelTick } from "../../wheel-tick-audio";
   import {
     countSoundRefs,
     defaultNameForPath,
@@ -22,11 +23,23 @@
 
   function playUp() {
     const url = resolveSoundUrl(cfg, cfg.fallbackUpSoundPath) ?? DEFAULT_UP_SOUND_URL;
-    previewAudio(url, cfg.volumeDb);
+    // Spot-Offset nur, wenn der User auch einen eigenen UP-Sound gewählt hat.
+    const off = cfg.fallbackUpSoundPath ? cfg.fallbackUpSoundVolumeDb : 0;
+    previewAudio(url, cfg.volumeDb + off);
   }
   function playDown() {
     const url = resolveSoundUrl(cfg, cfg.fallbackDownSoundPath) ?? DEFAULT_DOWN_SOUND_URL;
-    previewAudio(url, cfg.volumeDb);
+    const off = cfg.fallbackDownSoundPath ? cfg.fallbackDownSoundVolumeDb : 0;
+    previewAudio(url, cfg.volumeDb + off);
+  }
+
+  // Kurze Tick-Salve als Hörprobe — simuliert die Verlangsamung am Spin-Ende.
+  function playTickSample() {
+    const delays = [0, 90, 200, 340, 510, 720, 990];
+    delays.forEach((d, i) => {
+      const hint = i / (delays.length - 1);
+      setTimeout(() => playWheelTick(cfg.volumeDb, cfg.wheelTickVolume, hint), d);
+    });
   }
 
   // ===== Bibliothek-Verwaltung =====
@@ -106,6 +119,29 @@
 </Card>
 
 <Card
+  title="Glücksrad-Tick"
+  hint="Dynamisch erzeugter Klick-Sound, der beim Vorbeilaufen des Pointers an einer Sektor-Grenze gespielt wird. Wird vollständig in der App synthetisiert — keine Datei nötig. 0 = aus."
+>
+  <Field
+    label="Tick-Lautstärke"
+    hint="Skaliert zusätzlich zur Master-Lautstärke. 0 deaktiviert den Tick komplett."
+  >
+    <Slider
+      bind:value={cfg.wheelTickVolume}
+      min={0}
+      max={100}
+      step={1}
+      format={(v) => (v <= 0 ? "Aus" : `${v.toFixed(0)} %`)}
+    />
+  </Field>
+  <Field hint="Spielt eine kurze Tick-Salve, die das Abbremsen am Spin-Ende imitiert.">
+    <div class="test-row">
+      <Button size="sm" on:click={playTickSample}>▶ Tick-Salve testen</Button>
+    </div>
+  </Field>
+</Card>
+
+<Card
   title="Sound-Bibliothek"
   hint="Zentrale Liste aller Sounds. Beim Hochladen wird ein Eintrag angelegt, den du in allen Pickern (Level-Sounds, Skill-Sounds, Wheel-Segmente, Stream-HP) auswählen kannst. Hier kannst du sie umbenennen, vorhören oder entfernen."
 >
@@ -158,7 +194,9 @@
     <SoundPicker
       value={cfg.fallbackUpSoundPath}
       placeholder="Default (up.mp3)"
+      volumeDb={cfg.fallbackUpSoundVolumeDb}
       on:change={(e) => (cfg.fallbackUpSoundPath = e.detail)}
+      on:volumeChange={(e) => (cfg.fallbackUpSoundVolumeDb = e.detail)}
     />
   </Field>
 
@@ -166,7 +204,9 @@
     <SoundPicker
       value={cfg.fallbackDownSoundPath}
       placeholder="Default (down.mp3)"
+      volumeDb={cfg.fallbackDownSoundVolumeDb}
       on:change={(e) => (cfg.fallbackDownSoundPath = e.detail)}
+      on:volumeChange={(e) => (cfg.fallbackDownSoundVolumeDb = e.detail)}
     />
   </Field>
 </Card>

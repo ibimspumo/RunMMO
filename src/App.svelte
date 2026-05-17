@@ -102,30 +102,31 @@
 
   function scheduleFakeHeal() {
     stopFakeScheduler();
-    // Grosse Streuung 300-3500ms — Balken hat Zeit, weiter zu draenen,
-    // bevor der naechste Heal kommt. Sieht wackeliger / spannender aus.
-    const delay = 300 + Math.random() * 3200;
+    // Intervall skaliert invers mit Drain — hohe KMH triggert oft, niedrige
+    // KMH selten. Sonst klebt HP bei schnellem Drain am Floor, weil zwischen
+    // den Heal-Versuchen zu viel HP weggebrannt wird.
+    const drainPerSec = hpDrainRatePerSec(cfg, state.currentLevel + 1);
+    const baseMs = Math.max(150, Math.min(700, 800 / Math.sqrt(drainPerSec + 1)));
+    const delay = baseMs * (0.7 + Math.random() * 0.6);
     fakeTimeoutHandle = window.setTimeout(() => {
       fakeTimeoutHandle = null;
       if (!fakeOn) return;
       if (cfg.mode === "mmo" && cfg.streamHpEnabled && state.hp > 0) {
         const trigger = cfg.streamHpMax * 0.05;
         if (state.hp < trigger) {
-          // Nicht jedes Mal heilen — 35% Chance auf Skip, damit HP wirklich
-          // bis fast auf den Floor (~1%) runter kann bevor der naechste
-          // Rettungs-Heal greift.
-          if (Math.random() < 0.65) {
-            // Adaptiv an die Drain-Rate koppeln: jeder Heal kompensiert
-            // 2-5s Drain. Dadurch fuehlt sich Fake-Mode auf 1KMH (langsamer
-            // Drain → winziger Heal) genauso knapp an wie auf 12KMH
-            // (schneller Drain → grosser Heal), statt am Cap oder am Floor
-            // zu kleben.
-            const drainPerSec = hpDrainRatePerSec(cfg, state.currentLevel + 1);
-            // 1.2-2.5s Drain-Recovery pro Heal. Enger als vorher (war 2-5s),
-            // damit der anschliessende Drain-Down auf niedrigen Levels nicht
-            // ewig braucht — Bouncing bleibt knapp. Bei L12 wird die Menge
-            // ohnehin am maxHeal-Cap abgeschnitten (30 HP), L12-Feel bleibt.
-            const recoveryWindow = 1.2 + Math.random() * 1.3;
+          // Heal-Chance steigt, je naeher HP am Floor — natuerliches
+          // Rettungs-Verhalten. 90% am Floor, 30% an der Trigger-Kante.
+          const floor = Math.max(1, cfg.streamHpMax * 0.01);
+          const hpNorm = Math.max(
+            0,
+            Math.min(1, (state.hp - floor) / Math.max(1, trigger - floor)),
+          );
+          const healChance = 0.9 - 0.6 * hpNorm;
+          if (Math.random() < healChance) {
+            // Heal-Menge proportional zur Drain-Rate: 0.5-1.5s Drain
+            // wiederherstellen → Bouncing-Range fuehlt sich auf jedem Level
+            // gleich knapp an (visuell ~1%-5%).
+            const recoveryWindow = 0.5 + Math.random();
             let amount = drainPerSec * recoveryWindow;
             const minHeal = cfg.streamHpMax * 0.003;
             const maxHeal = cfg.streamHpMax * 0.03;
@@ -208,10 +209,16 @@
   }
 
   function playDeathSound() {
-    playPooled(streamHpDeathSoundUrl(cfg), cfg.volumeDb, "death");
+    // Spot-Offset nur greifen lassen, wenn der User auch einen eigenen Sound
+    // konfiguriert hat — bei Default-Asset bleiben wir bei Master.
+    const off = cfg.streamHpDeathSoundPath ? cfg.streamHpDeathSoundVolumeDb : 0;
+    playPooled(streamHpDeathSoundUrl(cfg), cfg.volumeDb + off, "death");
   }
   function playReviveSound() {
-    playPooled(streamHpReviveSoundUrl(cfg), cfg.volumeDb, "heal");
+    const off = cfg.streamHpExtraLifeReviveSoundPath
+      ? cfg.streamHpExtraLifeReviveSoundVolumeDb
+      : 0;
+    playPooled(streamHpReviveSoundUrl(cfg), cfg.volumeDb + off, "heal");
   }
 
   // Heal/Damage liegen in stores.ts, damit Webhooks und die Test-Buttons
@@ -255,8 +262,8 @@
   }
 
   function playLevelSound(level0: number, direction: "up" | "down") {
-    const url = soundUrlForLevel(level0, cfg, direction);
-    playPooled(url, cfg.volumeDb, "level");
+    const { url, volumeDb } = soundUrlForLevel(level0, cfg, direction);
+    playPooled(url, volumeDb, "level");
   }
 
   function moveUp(): boolean {
@@ -391,20 +398,32 @@
 
   // Sound-Kaskade beim Skill-Effekt:
   //   effect.soundPath > segment.soundPath > skill.soundPath > ∅
+  // Der Volume-Offset folgt jeweils dem gewählten Cascade-Member.
   // Wird einmal pro Effekt gespielt, sobald applySkillEffect feuert.
   function playSkillEffectSound(
     eff: SkillEffect,
     sourceSkillId: number | undefined,
     segmentSoundPath: SoundRef,
+    segmentSoundVolumeDb: number,
   ) {
-    let ref: SoundRef = eff.soundPath ?? null;
-    if (!ref) ref = segmentSoundPath;
-    if (!ref && sourceSkillId !== undefined) {
+    let ref: SoundRef = null;
+    let offset = 0;
+    if (eff.soundPath) {
+      ref = eff.soundPath;
+      offset = eff.soundVolumeDb;
+    } else if (segmentSoundPath) {
+      ref = segmentSoundPath;
+      offset = segmentSoundVolumeDb;
+    } else if (sourceSkillId !== undefined) {
       const sk = cfg.skills.find((s) => s.id === sourceSkillId);
-      ref = sk?.soundPath ?? null;
+      if (sk?.soundPath) {
+        ref = sk.soundPath;
+        offset = sk.soundVolumeDb;
+      }
     }
+    if (!ref) return;
     const url = resolveSoundUrl(cfg, ref);
-    if (url) playPooled(url, cfg.volumeDb, "skill");
+    if (url) playPooled(url, cfg.volumeDb + offset, "skill");
   }
 
   // Effekte vom Skill-Fire-Pulse anwenden. Heal/Damage gehen über die
@@ -416,8 +435,9 @@
     eff: SkillEffect,
     sourceSkillId?: number,
     segmentSoundPath: SoundRef = null,
+    segmentSoundVolumeDb: number = 0,
   ) {
-    playSkillEffectSound(eff, sourceSkillId, segmentSoundPath);
+    playSkillEffectSound(eff, sourceSkillId, segmentSoundPath, segmentSoundVolumeDb);
     switch (eff.kind) {
       case "heal": {
         const f = multiplierFactorFor("heal");
@@ -543,7 +563,12 @@
     if (!fire || fire.seq === lastSkillFireSeq) return;
     lastSkillFireSeq = fire.seq;
     for (const eff of fire.effects)
-      applySkillEffect(eff, fire.skillId, fire.segmentSoundPath);
+      applySkillEffect(
+        eff,
+        fire.skillId,
+        fire.segmentSoundPath,
+        fire.segmentSoundVolumeDb,
+      );
   });
 
   // === Aspect Ratio Lock (9:16) ===

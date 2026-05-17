@@ -18,8 +18,15 @@
   export let value: SoundRef = null;
   // Placeholder, wenn nichts gewählt (z.B. "Default (up.mp3)" oder "Kein Sound").
   export let placeholder: string = "Kein Sound";
+  // Optionaler Volume-Offset in dB. Wenn ein number übergeben wird, zeigt der
+  // Picker neben dem Trigger einen kleinen dB-Slider und emittiert bei
+  // Änderung volumeChange. null/undefined = Slider nicht anzeigen.
+  export let volumeDb: number | null = null;
 
-  const dispatch = createEventDispatcher<{ change: SoundRef }>();
+  const dispatch = createEventDispatcher<{
+    change: SoundRef;
+    volumeChange: number;
+  }>();
 
   let open_ = false;
 
@@ -41,7 +48,15 @@
 
   function previewRef(ref: SoundRef) {
     const url = resolveSoundUrl(cfg, ref);
-    previewAudio(url, cfg.volumeDb);
+    // Bei Preview den effektiven Pegel anhören (Master + Spot-Offset).
+    const offset = typeof volumeDb === "number" ? volumeDb : 0;
+    previewAudio(url, cfg.volumeDb + offset);
+  }
+
+  function onVolumeInput(e: Event) {
+    const t = e.currentTarget as HTMLInputElement;
+    const next = Number(t.value);
+    if (Number.isFinite(next)) dispatch("volumeChange", next);
   }
 
   function pick(entryId: string) {
@@ -163,6 +178,28 @@
     {/if}
     <span class="trigger-cta">Bibliothek</span>
   </button>
+
+  {#if volumeDb !== null && value}
+    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-noninteractive-element-interactions -->
+    <label
+      class="vol-knob"
+      title={`Lautstärke-Offset für diesen Sound (zur Master-Lautstärke addiert).\nAktuell: ${volumeDb.toFixed(1)} dB`}
+      on:click|stopPropagation
+    >
+      <span class="vol-icon">🔊</span>
+      <input
+        type="range"
+        class="vol-slider"
+        min={-40}
+        max={12}
+        step={0.5}
+        value={volumeDb}
+        on:input={onVolumeInput}
+        on:change={onVolumeInput}
+      />
+      <span class="vol-value">{volumeDb > 0 ? "+" : ""}{volumeDb.toFixed(1)}<span class="vol-unit">dB</span></span>
+    </label>
+  {/if}
 </div>
 
 {#if open_}
@@ -252,6 +289,48 @@
 <style>
   .picker-trigger {
     width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .picker-trigger > .trigger-btn {
+    flex: 1;
+    min-width: 0;
+  }
+  .vol-knob {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--c-bg-3);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-sm);
+    padding: 3px 6px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .vol-knob:hover {
+    background: var(--c-bg-4);
+    border-color: var(--c-border-strong);
+  }
+  .vol-icon {
+    font-size: 11px;
+    color: var(--c-text-dim);
+  }
+  .vol-slider {
+    width: 80px;
+    accent-color: var(--c-accent);
+  }
+  .vol-value {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--c-text-muted);
+    min-width: 38px;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .vol-unit {
+    margin-left: 2px;
+    opacity: 0.6;
   }
   .trigger-btn {
     display: flex;

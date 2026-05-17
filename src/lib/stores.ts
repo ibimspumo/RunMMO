@@ -126,27 +126,38 @@ export function imageUrlForLevel(
   return DEFAULT_GIFT_URLS[level0] ?? null;
 }
 
+// Liefert für einen Level-Sound die URL UND den effektiven dB-Wert
+// (Master + Quellen-Offset). Quellenwahl in Reihenfolge:
+//   1. Slot-Sound (mit Slot-Offset)
+//   2. Fallback Up/Down (mit Fallback-Offset)
+//   3. Bundled Default-Asset (kein Offset, nur Master)
 export function soundUrlForLevel(
   level0: number,
   cfg: AppSettings,
   direction: "up" | "down",
-): string | null {
+): { url: string | null; volumeDb: number } {
   const slot = cfg.levels[level0];
   const slotUrl = resolveSoundUrl(cfg, slot?.soundPath ?? null);
-  if (slotUrl) return slotUrl;
+  if (slotUrl) {
+    return { url: slotUrl, volumeDb: cfg.volumeDb + (slot?.soundVolumeDb ?? 0) };
+  }
   if (direction === "up") {
-    return (
-      resolveSoundUrl(cfg, cfg.fallbackUpSoundPath) ?? DEFAULT_UP_SOUND_URL
-    );
+    const fbUrl = resolveSoundUrl(cfg, cfg.fallbackUpSoundPath);
+    if (fbUrl) return { url: fbUrl, volumeDb: cfg.volumeDb + cfg.fallbackUpSoundVolumeDb };
+    return { url: DEFAULT_UP_SOUND_URL, volumeDb: cfg.volumeDb };
   } else {
-    return (
-      resolveSoundUrl(cfg, cfg.fallbackDownSoundPath) ?? DEFAULT_DOWN_SOUND_URL
-    );
+    const fbUrl = resolveSoundUrl(cfg, cfg.fallbackDownSoundPath);
+    if (fbUrl) return { url: fbUrl, volumeDb: cfg.volumeDb + cfg.fallbackDownSoundVolumeDb };
+    return { url: DEFAULT_DOWN_SOUND_URL, volumeDb: cfg.volumeDb };
   }
 }
 
 function migrateSoundRef(v: unknown): SoundRef {
   return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+function migrateVolumeDb(v: unknown): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
 }
 
 // Migration: alte gespeicherte Effekte können nur `kind` + `amount` haben.
@@ -172,10 +183,16 @@ function migrateEffect(e: SkillEffect): SkillEffect {
           weight: typeof s?.weight === "number" ? s.weight : 1,
           effects: Array.isArray(s?.effects) ? s.effects.map(migrateEffect) : [],
           soundPath: migrateSoundRef((s as { soundPath?: unknown })?.soundPath),
+          soundVolumeDb: migrateVolumeDb(
+            (s as { soundVolumeDb?: unknown })?.soundVolumeDb,
+          ),
         }))
       : [],
     label: typeof e?.label === "string" ? e.label : "",
     soundPath: migrateSoundRef((e as { soundPath?: unknown })?.soundPath),
+    soundVolumeDb: migrateVolumeDb(
+      (e as { soundVolumeDb?: unknown })?.soundVolumeDb,
+    ),
   };
   return out;
 }
@@ -219,30 +236,54 @@ export async function loadSettings(): Promise<void> {
         giftIconPath: s.giftIconPath ?? null,
         valueTextOverride: s.valueTextOverride ?? "",
         soundPath: migrateSoundRef((s as { soundPath?: unknown }).soundPath),
+        soundVolumeDb: migrateVolumeDb(
+          (s as { soundVolumeDb?: unknown }).soundVolumeDb,
+        ),
         rules: Array.isArray(s.rules)
           ? s.rules.map((r) => ({
               ...r,
               effects: Array.isArray(r.effects) ? r.effects.map(migrateEffect) : [],
+              successSoundPath: migrateSoundRef(
+                (r as { successSoundPath?: unknown }).successSoundPath,
+              ),
+              successSoundVolumeDb: migrateVolumeDb(
+                (r as { successSoundVolumeDb?: unknown }).successSoundVolumeDb,
+              ),
+              failureSoundPath: migrateSoundRef(
+                (r as { failureSoundPath?: unknown }).failureSoundPath,
+              ),
+              failureSoundVolumeDb: migrateVolumeDb(
+                (r as { failureSoundVolumeDb?: unknown }).failureSoundVolumeDb,
+              ),
             }))
           : [],
       }));
     }
     // Sound-Bibliothek: Default leer; alte Configs ohne das Feld werden hier
     // korrigiert. Außerdem alle SoundRef-Felder normalisieren (leere Strings
-    // → null).
+    // → null) und parallele VolumeDb-Felder auffüllen.
     if (!Array.isArray(merged.soundLibrary)) merged.soundLibrary = [];
     merged.fallbackUpSoundPath = migrateSoundRef(merged.fallbackUpSoundPath);
+    merged.fallbackUpSoundVolumeDb = migrateVolumeDb(merged.fallbackUpSoundVolumeDb);
     merged.fallbackDownSoundPath = migrateSoundRef(merged.fallbackDownSoundPath);
+    merged.fallbackDownSoundVolumeDb = migrateVolumeDb(merged.fallbackDownSoundVolumeDb);
     merged.streamHpDeathSoundPath = migrateSoundRef(merged.streamHpDeathSoundPath);
+    merged.streamHpDeathSoundVolumeDb = migrateVolumeDb(merged.streamHpDeathSoundVolumeDb);
     merged.streamHpHealSoundPath = migrateSoundRef(merged.streamHpHealSoundPath);
+    merged.streamHpHealSoundVolumeDb = migrateVolumeDb(merged.streamHpHealSoundVolumeDb);
     merged.streamHpDamageSoundPath = migrateSoundRef(merged.streamHpDamageSoundPath);
+    merged.streamHpDamageSoundVolumeDb = migrateVolumeDb(merged.streamHpDamageSoundVolumeDb);
     merged.streamHpExtraLifeReviveSoundPath = migrateSoundRef(
       merged.streamHpExtraLifeReviveSoundPath,
+    );
+    merged.streamHpExtraLifeReviveSoundVolumeDb = migrateVolumeDb(
+      merged.streamHpExtraLifeReviveSoundVolumeDb,
     );
     if (Array.isArray(merged.levels)) {
       merged.levels = merged.levels.map((lv) => ({
         ...lv,
         soundPath: migrateSoundRef(lv?.soundPath),
+        soundVolumeDb: migrateVolumeDb((lv as { soundVolumeDb?: unknown })?.soundVolumeDb),
       }));
     }
     settings.set(merged);
@@ -469,7 +510,11 @@ export function triggerHeal(amount: number): void {
     ...s,
     hp: Math.min(cfg.streamHpMax, s.hp + amount),
   }));
-  playHpSound(streamHpHealSoundUrl(cfg), cfg.volumeDb, "heal");
+  playHpSound(
+    streamHpHealSoundUrl(cfg),
+    cfg.volumeDb + cfg.streamHpHealSoundVolumeDb,
+    "heal",
+  );
   emitPulse("heal", amount);
 }
 
@@ -482,7 +527,11 @@ export function triggerDamage(amount: number): void {
     ...s,
     hp: Math.max(floor, s.hp - amount),
   }));
-  playHpSound(streamHpDamageSoundUrl(cfg), cfg.volumeDb, "damage");
+  playHpSound(
+    streamHpDamageSoundUrl(cfg),
+    cfg.volumeDb + cfg.streamHpDamageSoundVolumeDb,
+    "damage",
+  );
   emitPulse("damage", amount);
 }
 
@@ -585,6 +634,12 @@ export type WheelSpinRequest =
       chance: number;          // 0..100
       success: boolean;
       effects: SkillEffect[];
+      // Optional: Rule-Level-Sound, der genau einmal beim Spin-Ende abhängig
+      // vom Ergebnis gespielt wird (parallel zur Effekt-Kaskade).
+      successSoundPath: SoundRef;
+      successSoundVolumeDb: number;
+      failureSoundPath: SoundRef;
+      failureSoundVolumeDb: number;
     }
   | {
       mode: "segments";
@@ -644,6 +699,7 @@ export type SkillFire = {
   skillId: number;
   effects: SkillEffect[];
   segmentSoundPath: SoundRef;
+  segmentSoundVolumeDb: number;
   seq: number;
 };
 export const skillFire: Writable<SkillFire | null> = writable(null);
@@ -653,9 +709,16 @@ export function emitSkillFire(
   skillId: number,
   effects: SkillEffect[],
   segmentSoundPath: SoundRef = null,
+  segmentSoundVolumeDb: number = 0,
 ): void {
   fireSeq += 1;
-  skillFire.set({ skillId, effects, segmentSoundPath, seq: fireSeq });
+  skillFire.set({
+    skillId,
+    effects,
+    segmentSoundPath,
+    segmentSoundVolumeDb,
+    seq: fireSeq,
+  });
 }
 
 // Berechnet aktuelle Lebenspunkte in Prozent für Bedingungs-Matching.
@@ -697,6 +760,10 @@ export function triggerSkill(id: number): string {
     chance: rule.probability,
     success,
     effects: rule.effects,
+    successSoundPath: rule.successSoundPath ?? null,
+    successSoundVolumeDb: rule.successSoundVolumeDb ?? 0,
+    failureSoundPath: rule.failureSoundPath ?? null,
+    failureSoundVolumeDb: rule.failureSoundVolumeDb ?? 0,
   });
   return `skill #${id} queued (${rule.probability}%, predetermined=${success})`;
 }

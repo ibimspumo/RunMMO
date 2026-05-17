@@ -7,7 +7,7 @@ use axum::{
     extract::{Query, State},
     http::StatusCode,
     response::{IntoResponse, Json},
-    routing::get,
+    routing::{get, on, MethodFilter},
     Router,
 };
 use serde::Deserialize;
@@ -73,15 +73,18 @@ fn cors_headers() -> CorsLayer {
 }
 
 fn build_router(state: AxumState) -> Router {
+    // GET + POST akzeptieren, damit Tools wie TikFinity (POST) genauso funktionieren
+    // wie ein Browser-Test (GET).
+    let any = MethodFilter::GET.or(MethodFilter::POST);
     Router::new()
-        .route("/up", get(handle_up))
-        .route("/down", get(handle_down))
-        .route("/reset", get(handle_reset))
-        .route("/gift", get(handle_gift))
-        .route("/heal", get(handle_heal))
-        .route("/damage", get(handle_damage))
-        .route("/skill", get(handle_skill))
-        .route("/status", get(handle_status))
+        .route("/up", on(any, handle_up))
+        .route("/down", on(any, handle_down))
+        .route("/reset", on(any, handle_reset))
+        .route("/gift", on(any, handle_gift))
+        .route("/heal", on(any, handle_heal))
+        .route("/damage", on(any, handle_damage))
+        .route("/skill", on(any, handle_skill))
+        .route("/status", on(any, handle_status))
         .route("/", get(handle_root))
         .with_state(state)
         .layer(cors_headers())
