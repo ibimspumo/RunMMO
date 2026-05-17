@@ -115,6 +115,8 @@ export function defaultSettings(): AppSettings {
     tachoShowCenterValue: true,
     tachoNeedleColor: c(1, 1, 1),
     tachoDialBgColor: c(0.08, 0.08, 0.08, 0.9),
+    tachoInactiveSegmentOpacity: 0.5,
+    tachoInactiveLabelOpacity: 0.85,
 
     streamHpEnabled: true,
     streamHpMax: 1000,
@@ -152,6 +154,13 @@ export function defaultSettings(): AppSettings {
     streamHpTextOutlineColor: c(0, 0, 0, 0.85),
     streamHpTextOutlineSize: 1,
 
+    streamHpExtraLivesMax: 3,
+    streamHpExtraLifeHeartColor: c(0.95, 0.2, 0.3),
+    streamHpExtraLifeHeartSize: 22,
+    streamHpExtraLifeHeartGap: 4,
+    streamHpExtraLifeHeartOffsetY: 6,
+    streamHpExtraLifeReviveSoundPath: null,
+
     skills: [exampleHealSkill()],
 
     skillBarX: 55,
@@ -160,6 +169,7 @@ export function defaultSettings(): AppSettings {
     skillBarGap: 8,
     skillBarShowInactive: true,
     skillBarStyle: "framed",
+    skillBarAlign: "left",
 
     wheelX: 75,
     wheelY: 220,
@@ -239,6 +249,46 @@ export function defaultSettings(): AppSettings {
     buffBarTextOutlineEnabled: false,
     buffBarTextOutlineColor: c(0, 0, 0, 1),
     buffBarTextOutlineSize: 0,
+
+    multiplierX: 75,
+    multiplierY: 200,
+    multiplierScale: 1,
+    multiplierFactorText: {
+      fontSize: 72,
+      color: c(1, 1, 1),
+      shadowEnabled: true,
+      shadowColor: c(0, 0, 0, 0.7),
+      shadowOffsetX: 0,
+      shadowOffsetY: 4,
+      shadowBlur: 10,
+      outlineEnabled: true,
+      outlineColor: c(0, 0, 0, 1),
+      outlineSize: 6,
+    },
+    multiplierTimerText: {
+      fontSize: 40,
+      color: c(1, 1, 1),
+      shadowEnabled: true,
+      shadowColor: c(0, 0, 0, 0.7),
+      shadowOffsetX: 0,
+      shadowOffsetY: 3,
+      shadowBlur: 8,
+      outlineEnabled: true,
+      outlineColor: c(0, 0, 0, 1),
+      outlineSize: 4,
+    },
+    multiplierTargetsText: {
+      fontSize: 18,
+      color: c(1, 1, 1),
+      shadowEnabled: true,
+      shadowColor: c(0, 0, 0, 0.6),
+      shadowOffsetX: 0,
+      shadowOffsetY: 2,
+      shadowBlur: 6,
+      outlineEnabled: true,
+      outlineColor: c(0, 0, 0, 1),
+      outlineSize: 2,
+    },
   };
 }
 

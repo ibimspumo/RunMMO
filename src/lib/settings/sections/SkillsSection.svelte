@@ -33,6 +33,10 @@
   }[] = [
     { value: "heal", label: "Heilen (+HP)", inWheel: true },
     { value: "damage", label: "Schaden (−HP)", inWheel: true },
+    { value: "healOverTime", label: "Heilung pro Sekunde", inWheel: true },
+    { value: "damageOverTime", label: "Schaden pro Sekunde", inWheel: true },
+    { value: "freezeHp", label: "Leben einfrieren", inWheel: true },
+    { value: "extraLife", label: "Extraleben (Revive)", inWheel: true },
     { value: "levelUp", label: "Level hoch", inWheel: true },
     { value: "levelDown", label: "Level runter", inWheel: true },
     { value: "levelReset", label: "Level reset", inWheel: true },
@@ -64,6 +68,13 @@
       case "heal":
       case "damage":
         return { ...base, amount: 100 };
+      case "healOverTime":
+      case "damageOverTime":
+        return { ...base, amount: 10, durationSec: 10 };
+      case "freezeHp":
+        return { ...base, durationSec: 10 };
+      case "extraLife":
+        return { ...base, amount: 50, level: 1 };
       case "setLevel":
         return { ...base, level: 6, durationSec: 30 };
       case "multiplier":
@@ -208,6 +219,14 @@
         return `+${e.amount} HP`;
       case "damage":
         return `−${e.amount} HP`;
+      case "healOverTime":
+        return `+${e.amount}/s · ${e.durationSec}s`;
+      case "damageOverTime":
+        return `−${e.amount}/s · ${e.durationSec}s`;
+      case "freezeHp":
+        return `❄ ${e.durationSec}s`;
+      case "extraLife":
+        return `+${e.level ?? 1} ❤ → ${e.amount ?? 50}%`;
       case "levelUp":
         return "Level +1";
       case "levelDown":
@@ -278,6 +297,9 @@
   const MULTIPLIABLE_KINDS: { value: SkillEffectKind; label: string }[] = [
     { value: "heal", label: "Heilung-Beträge" },
     { value: "damage", label: "Schaden-Beträge" },
+    { value: "healOverTime", label: "Heilung/s-Beträge" },
+    { value: "damageOverTime", label: "Schaden/s-Beträge" },
+    { value: "freezeHp", label: "Freeze-Dauer" },
   ];
 
   function toggleMultiplierKind(eff: SkillEffect, kind: SkillEffectKind) {
@@ -620,6 +642,78 @@
                       width="120px"
                     />
                   </div>
+                {:else if eff.kind === "healOverTime" || eff.kind === "damageOverTime"}
+                  <div class="param-row">
+                    <span class="param-label">Betrag</span>
+                    <NumberInput
+                      bind:value={eff.amount}
+                      min={0.1}
+                      max={10000}
+                      step={0.5}
+                      suffix="HP/s"
+                      width="120px"
+                    />
+                  </div>
+                  <div class="param-row">
+                    <span class="param-label">Dauer</span>
+                    <NumberInput
+                      bind:value={eff.durationSec}
+                      min={1}
+                      max={600}
+                      step={1}
+                      suffix="s"
+                      width="100px"
+                    />
+                    <span class="param-hint">
+                      Gesamtwirkung: {(eff.amount * eff.durationSec).toFixed(0)} HP
+                    </span>
+                  </div>
+                {:else if eff.kind === "freezeHp"}
+                  <div class="param-row">
+                    <span class="param-label">Dauer</span>
+                    <NumberInput
+                      bind:value={eff.durationSec}
+                      min={1}
+                      max={600}
+                      step={1}
+                      suffix="s"
+                      width="100px"
+                    />
+                    <span class="param-hint">
+                      HP-Drain ist für diese Zeit pausiert. Multiplier auf
+                      „Freeze-Dauer" skaliert sie.
+                    </span>
+                  </div>
+                {:else if eff.kind === "extraLife"}
+                  <div class="param-row">
+                    <span class="param-label">Revive bei</span>
+                    <NumberInput
+                      bind:value={eff.amount}
+                      min={1}
+                      max={100}
+                      step={1}
+                      suffix="%"
+                      width="100px"
+                    />
+                    <span class="param-hint">
+                      Prozent vom Max-HP, auf das beim Verbrauch eines Lebens
+                      aufgefüllt wird.
+                    </span>
+                  </div>
+                  <div class="param-row">
+                    <span class="param-label">Leben pro Auslösung</span>
+                    <NumberInput
+                      bind:value={eff.level}
+                      min={1}
+                      max={20}
+                      step={1}
+                      width="80px"
+                    />
+                    <span class="param-hint">
+                      Cap & Anzeige werden in den Stream-HP-Settings konfiguriert
+                      (max. {cfg.streamHpExtraLivesMax} aktiv).
+                    </span>
+                  </div>
                 {:else if eff.kind === "setLevel"}
                   <div class="param-row">
                     <span class="param-label">Ziel-Level</span>
@@ -779,6 +873,45 @@
                                 suffix="HP"
                                 width="100px"
                               />
+                            {:else if segEff.kind === "healOverTime" || segEff.kind === "damageOverTime"}
+                              <NumberInput
+                                bind:value={segEff.amount}
+                                min={0.1}
+                                max={10000}
+                                step={0.5}
+                                suffix="HP/s"
+                                width="100px"
+                              />
+                              <NumberInput
+                                bind:value={segEff.durationSec}
+                                min={1}
+                                max={600}
+                                suffix="s"
+                                width="80px"
+                              />
+                            {:else if segEff.kind === "freezeHp"}
+                              <NumberInput
+                                bind:value={segEff.durationSec}
+                                min={1}
+                                max={600}
+                                suffix="s"
+                                width="80px"
+                              />
+                            {:else if segEff.kind === "extraLife"}
+                              <NumberInput
+                                bind:value={segEff.amount}
+                                min={1}
+                                max={100}
+                                suffix="% HP"
+                                width="100px"
+                              />
+                              <NumberInput
+                                bind:value={segEff.level}
+                                min={1}
+                                max={20}
+                                suffix="❤"
+                                width="80px"
+                              />
                             {:else if segEff.kind === "setLevel"}
                               <NumberInput
                                 bind:value={segEff.level}
@@ -817,6 +950,23 @@
                               title="Effekt entfernen"
                             >✕</button>
                           </div>
+                          {#if segEff.kind === "multiplier"}
+                            <div class="param-row col inner-extra">
+                              <span class="param-label">Wirkt auf</span>
+                              <div class="multi-kinds">
+                                {#each MULTIPLIABLE_KINDS as mk}
+                                  <label class="kind-chip">
+                                    <input
+                                      type="checkbox"
+                                      checked={(segEff.multipliedKinds ?? []).includes(mk.value)}
+                                      on:change={() => toggleMultiplierKind(segEff, mk.value)}
+                                    />
+                                    <span>{mk.label}</span>
+                                  </label>
+                                {/each}
+                              </div>
+                            </div>
+                          {/if}
                         {/each}
 
                         <Button
@@ -876,6 +1026,25 @@
     />
   </Field>
 
+  <Field
+    label="Ausrichtung"
+    hint={'Bestimmt, in welche Richtung die Leiste wächst, wenn Skills hinzu-/wegkommen. „Mittig" hält den Anker zentriert — ideal für zentrierte Platzierung.'}
+  >
+    <div class="align-row">
+      <label class="align-chip" class:active={cfg.skillBarAlign === "left"}>
+        <input type="radio" bind:group={cfg.skillBarAlign} value="left" />
+        <span>← Links</span>
+      </label>
+      <label class="align-chip" class:active={cfg.skillBarAlign === "center"}>
+        <input type="radio" bind:group={cfg.skillBarAlign} value="center" />
+        <span>↔ Mittig</span>
+      </label>
+      <label class="align-chip" class:active={cfg.skillBarAlign === "right"}>
+        <input type="radio" bind:group={cfg.skillBarAlign} value="right" />
+        <span>Rechts →</span>
+      </label>
+    </div>
+  </Field>
 </Card>
 
 <Callout variant="info">
@@ -1251,6 +1420,53 @@
     border: 1px dashed var(--c-border);
     border-radius: var(--r-sm);
     padding: 4px 6px;
+  }
+  /* Zusätzliche Parameter (z.B. Multiplier-„Wirkt auf"), die unter einer
+     Inline-Effekt-Zeile im Sektor erscheinen. Visuell gleicher Stil wie die
+     Zeile darüber, aber ohne Border-Top, damit sie als Fortsetzung wirken. */
+  .inner-extra {
+    background: var(--c-bg-0);
+    border: 1px dashed var(--c-border);
+    border-top: none;
+    border-radius: 0 0 var(--r-sm) var(--r-sm);
+    margin-top: -8px;
+    padding: 6px 8px 8px;
+  }
+
+  /* Radio-Chip-Gruppe für Skill-Bar-Ausrichtung */
+  .align-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .align-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--c-bg-2);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-sm);
+    padding: 6px 12px;
+    font-size: var(--fs-sm);
+    color: var(--c-text);
+    cursor: pointer;
+    transition: background var(--duration), border-color var(--duration);
+  }
+  .align-chip:hover {
+    background: var(--c-bg-3);
+  }
+  .align-chip.active {
+    background: var(--c-accent-soft, rgba(56, 189, 248, 0.18));
+    border-color: var(--c-accent);
+    color: var(--c-accent);
+  }
+  .align-chip input {
+    /* Native radio versteckt — die Chip-Box ist das visuelle Element. */
+    appearance: none;
+    -webkit-appearance: none;
+    width: 0;
+    height: 0;
+    margin: 0;
   }
 
 </style>

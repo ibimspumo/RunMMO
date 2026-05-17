@@ -2,7 +2,14 @@
   import { onMount, onDestroy } from "svelte";
   import type { AppSettings, LadderState } from "../types";
   import { rgbaToCss } from "../defaults";
-  import { hpPulse } from "../stores";
+  import {
+    hpPulse,
+    activeHpFreezes,
+    activeHpDots,
+    skillRuntime,
+    settings,
+    extraLives,
+  } from "../stores";
 
   export let cfg: AppSettings;
   export let state: LadderState;
@@ -140,13 +147,39 @@
     else if (p.kind === "damage") triggerDamageFx(p.amount);
   });
 
+  // Eigene Uhr für Countdown-Reaktivität (Freeze-Restdauer, Skill-Cooldown).
+  let nowMs = Date.now();
+  let clockHandle: number | null = null;
+  function tickClock() {
+    nowMs = Date.now();
+    clockHandle = requestAnimationFrame(tickClock);
+  }
+
+  // Quelle des aktuellen / zuletzt aktiven Freeze, damit wir nach Ablauf
+  // weiter den Skill-Cooldown auf der Bar anzeigen können.
+  let lastFreezeSourceId: number | null = null;
+  const unsubFreezes = activeHpFreezes.subscribe((list) => {
+    let latestExp = 0;
+    let latestSrc: number | null = null;
+    for (const f of list) {
+      if (f.expiresAtMs > latestExp && typeof f.sourceSkillId === "number") {
+        latestExp = f.expiresAtMs;
+        latestSrc = f.sourceSkillId;
+      }
+    }
+    if (latestSrc !== null) lastFreezeSourceId = latestSrc;
+  });
+
   onMount(() => {
     updateSize();
     window.addEventListener("resize", updateSize);
+    clockHandle = requestAnimationFrame(tickClock);
   });
   onDestroy(() => {
     window.removeEventListener("resize", updateSize);
     unsubPulse();
+    unsubFreezes();
+    if (clockHandle !== null) cancelAnimationFrame(clockHandle);
     if (particleGcHandle !== null) {
       cancelAnimationFrame(particleGcHandle);
       particleGcHandle = null;
@@ -226,6 +259,49 @@
 
   // Anstieg der Heal-Partikel relativ zur Balkenhöhe (autoScale).
   $: particleRiseY = -(barHeight + 40 * autoScale);
+
+  // Extraleben-Anzeige: nur Herzen für aktive Leben, rechtsbündig über der Bar.
+  $: livesCount = $extraLives;
+  $: heartSizePx = Math.max(8, cfg.streamHpExtraLifeHeartSize * autoScale);
+  $: heartGapPx = Math.max(0, cfg.streamHpExtraLifeHeartGap * autoScale);
+  $: heartOffsetYPx = Math.max(0, cfg.streamHpExtraLifeHeartOffsetY * autoScale);
+  $: heartColorCss = rgbaToCss(cfg.streamHpExtraLifeHeartColor);
+  $: showLives = cfg.streamHpExtraLivesMax > 0 && livesCount > 0;
+
+  // Aktive Freeze + HoT/DoT — Reaktivität wird durch nowMs-Abhängigkeit
+  // erzwungen, damit Restzeit-Balken frame-genau aktualisieren.
+  $: frozen = (() => {
+    void nowMs;
+    return $activeHpFreezes.some((f) => f.expiresAtMs > nowMs);
+  })();
+  $: activeHot = (() => {
+    void nowMs;
+    return $activeHpDots.find(
+      (d) => d.kind === "healOverTime" && d.expiresAtMs > nowMs,
+    );
+  })();
+  $: activeDot = (() => {
+    void nowMs;
+    return $activeHpDots.find(
+      (d) => d.kind === "damageOverTime" && d.expiresAtMs > nowMs,
+    );
+  })();
+
+  // Skill-Cooldown des zuletzt freezenden Skills — sichtbar nach Ablauf des
+  // Freeze, solange der Skill noch auf Cooldown ist (sonst 0 / nichts).
+  $: skillCooldownFrac = (() => {
+    void nowMs;
+    if (lastFreezeSourceId === null) return 0;
+    const rt = $skillRuntime[lastFreezeSourceId];
+    if (!rt) return 0;
+    const sk = $settings.skills.find((s) => s.id === lastFreezeSourceId);
+    if (!sk || sk.cooldownSec <= 0) return 0;
+    const total = sk.cooldownSec * 1000;
+    const left = rt.cooldownUntilMs - nowMs;
+    return Math.max(0, Math.min(1, left / total));
+  })();
+  // Streifen wird nach Ende des Freeze gezeigt, nicht überlagert.
+  $: showCooldownStrip = !frozen && skillCooldownFrac > 0;
 </script>
 
 <div
@@ -237,6 +313,30 @@
     width: {barWidth}px;
   "
 >
+  {#if showLives}
+    <div
+      class="hp-lives"
+      data-design-target={designMode ? "hp.lives" : null}
+      style="
+        gap: {heartGapPx}px;
+        bottom: calc(100% + {heartOffsetYPx}px);
+        --heart-size: {heartSizePx}px;
+        --heart-color: {heartColorCss};
+      "
+    >
+      {#each Array(livesCount) as _, i (i)}
+        <svg
+          class="hp-heart"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path
+            d="M12 21s-7.5-4.7-9.5-9.1C1 8.6 3 5 6.4 5c2 0 3.3 1.1 4.1 2.3.3.4.7.6 1 .6.3 0 .7-.2 1-.6C13.2 6.1 14.5 5 16.5 5 19.9 5 22 8.6 21.5 11.9 19.5 16.3 12 21 12 21z"
+          />
+        </svg>
+      {/each}
+    </div>
+  {/if}
   <div
     class="hp-track"
     data-design-target={designMode ? "hp.bar" : null}
@@ -262,6 +362,47 @@
       bind:this={flashEl}
       style="border-radius: {innerRadius}px;"
     ></div>
+
+    {#if activeHot}
+      <div
+        class="hot-aura"
+        style="border-radius: {innerRadius}px;"
+        title="Heilung pro Sekunde"
+      ></div>
+    {/if}
+
+    {#if activeDot}
+      <div
+        class="dot-aura"
+        style="border-radius: {innerRadius}px;"
+        title="Schaden pro Sekunde"
+      ></div>
+    {/if}
+
+    {#if frozen}
+      <div
+        class="freeze-overlay"
+        style="border-radius: {innerRadius}px;"
+        title="Leben eingefroren"
+      >
+        <span class="snowflake sf-1">❄</span>
+        <span class="snowflake sf-2">❅</span>
+        <span class="snowflake sf-3">❄</span>
+        <span class="snowflake sf-4">❅</span>
+        <span class="snowflake sf-5">❄</span>
+      </div>
+    {/if}
+
+    {#if showCooldownStrip}
+      <div
+        class="freeze-cooldown"
+        style="
+          width: {Math.max(0, Math.round(barWidth * skillCooldownFrac))}px;
+          border-radius: {innerRadius}px;
+        "
+      ></div>
+    {/if}
+
     {#if cfg.streamHpShowNumbers}
       <span
         class="hp-text"
@@ -351,6 +492,104 @@
     mix-blend-mode: screen;
     pointer-events: none;
   }
+  /* Frost-Overlay während Freeze: kühler Cyan-Wash, leuchtender Rand,
+     dezentes Atmen + ein paar floatende Schneeflocken. */
+  .freeze-overlay {
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(
+        180deg,
+        rgba(186, 230, 253, 0.55) 0%,
+        rgba(125, 211, 252, 0.42) 50%,
+        rgba(56, 189, 248, 0.5) 100%
+      );
+    box-shadow:
+      inset 0 0 18px rgba(186, 230, 253, 0.95),
+      0 0 14px rgba(56, 189, 248, 0.7);
+    mix-blend-mode: screen;
+    overflow: hidden;
+    pointer-events: none;
+    animation: freeze-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes freeze-pulse {
+    0%, 100% { opacity: 0.85; }
+    50% { opacity: 1; }
+  }
+  .snowflake {
+    position: absolute;
+    top: 50%;
+    color: #f0f9ff;
+    font-size: 78%;
+    line-height: 1;
+    text-shadow:
+      0 0 6px rgba(186, 230, 253, 0.95),
+      0 0 2px rgba(255, 255, 255, 0.9);
+    transform: translateY(-50%);
+    animation: sf-drift 4.2s linear infinite;
+    will-change: transform, opacity;
+    user-select: none;
+  }
+  .sf-1 { left: 8%;  animation-delay: 0s; }
+  .sf-2 { left: 28%; animation-delay: -0.9s; font-size: 62%; }
+  .sf-3 { left: 50%; animation-delay: -1.8s; }
+  .sf-4 { left: 72%; animation-delay: -2.6s; font-size: 62%; }
+  .sf-5 { left: 90%; animation-delay: -3.4s; }
+  @keyframes sf-drift {
+    0%   { transform: translate(0, -50%) rotate(0deg); opacity: 0.55; }
+    25%  { transform: translate(-4px, -65%) rotate(120deg); opacity: 1; }
+    50%  { transform: translate(2px, -40%) rotate(220deg); opacity: 0.75; }
+    75%  { transform: translate(5px, -60%) rotate(310deg); opacity: 1; }
+    100% { transform: translate(0, -50%) rotate(360deg); opacity: 0.55; }
+  }
+  /* Cooldown-Streifen nach Freeze: dünner Cyan-Strip am unteren Rand der Bar,
+     schrumpft synchron zum Skill-Cooldown. */
+  .freeze-cooldown {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 18%;
+    min-height: 3px;
+    background:
+      linear-gradient(
+        90deg,
+        rgba(56, 189, 248, 0.85) 0%,
+        rgba(186, 230, 253, 0.95) 100%
+      );
+    box-shadow: 0 0 6px rgba(56, 189, 248, 0.85);
+    transition: width 100ms linear;
+    pointer-events: none;
+  }
+  /* HoT-Aura: sanfter grüner Glow am Rand, regelmäßig pulsierend. */
+  .hot-aura {
+    position: absolute;
+    inset: 0;
+    box-shadow:
+      inset 0 0 14px rgba(110, 231, 183, 0.7),
+      0 0 12px rgba(34, 197, 94, 0.55);
+    mix-blend-mode: screen;
+    pointer-events: none;
+    animation: hot-pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes hot-pulse {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
+  }
+  /* DoT-Aura: roter Glow, etwas hektischeres Pulsieren. */
+  .dot-aura {
+    position: absolute;
+    inset: 0;
+    box-shadow:
+      inset 0 0 14px rgba(248, 113, 113, 0.65),
+      0 0 12px rgba(239, 68, 68, 0.6);
+    mix-blend-mode: screen;
+    pointer-events: none;
+    animation: dot-pulse 0.9s ease-in-out infinite;
+  }
+  @keyframes dot-pulse {
+    0%, 100% { opacity: 0.45; }
+    50% { opacity: 1; }
+  }
   .hp-text {
     position: absolute;
     inset: 0;
@@ -420,5 +659,28 @@
   }
   .decay-text-inner {
     display: inline-block;
+  }
+  /* Extraleben: Herzen rechtsbündig direkt über dem HP-Balken. */
+  .hp-lives {
+    position: absolute;
+    right: 0;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    pointer-events: none;
+    user-select: none;
+  }
+  .hp-heart {
+    width: var(--heart-size);
+    height: var(--heart-size);
+    fill: var(--heart-color);
+    filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.55));
+    animation: heart-pop 240ms ease-out;
+    will-change: transform;
+  }
+  @keyframes heart-pop {
+    0% { transform: scale(0.4); opacity: 0; }
+    60% { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
   }
 </style>

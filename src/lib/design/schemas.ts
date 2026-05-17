@@ -199,6 +199,18 @@ export const SCHEMAS: Record<string, DesignSchema> = {
     ],
   },
 
+  // ===== HP-Leiste — Extraleben =====
+  "hp.lives": {
+    id: "hp.lives",
+    label: "HP-Leiste · Extraleben",
+    fields: [
+      { kind: "color", key: "streamHpExtraLifeHeartColor", label: "Herzfarbe", withAlpha: false },
+      { kind: "number", key: "streamHpExtraLifeHeartSize", label: "Herzgröße", suffix: "px" },
+      { kind: "number", key: "streamHpExtraLifeHeartGap", label: "Abstand zwischen Herzen", suffix: "px" },
+      { kind: "number", key: "streamHpExtraLifeHeartOffsetY", label: "Abstand zur HP-Leiste", suffix: "px" },
+    ],
+  },
+
   // ===== Leiter — Balken =====
   "ladder.bar": {
     id: "ladder.bar",
@@ -283,6 +295,22 @@ export const SCHEMAS: Record<string, DesignSchema> = {
       { kind: "color", key: "tachoNeedleColor", label: "Nadel" },
       { kind: "toggle", key: "tachoShowLabels", label: "Labels (1..12) anzeigen" },
       { kind: "toggle", key: "tachoShowCenterValue", label: "Mittiges KMH anzeigen" },
+
+      { kind: "group", label: "Inaktive Felder" },
+      {
+        kind: "number",
+        key: "tachoInactiveSegmentOpacity",
+        label: "Segment-Deckkraft",
+        step: 0.05,
+        hint: "0 = unsichtbar, 1 = volle Farbe.",
+      },
+      {
+        kind: "number",
+        key: "tachoInactiveLabelOpacity",
+        label: "Zahlen-Deckkraft",
+        step: 0.05,
+        hint: "Betrifft Labels und Ticks inaktiver Levels.",
+      },
     ],
   },
 
@@ -438,6 +466,78 @@ export const SCHEMAS: Record<string, DesignSchema> = {
       { kind: "toggle", key: "buffBarBorderEnabled", label: "Umrandung aktiv" },
       { kind: "color", key: "buffBarBorderColor", label: "Umrandungs-Farbe" },
       { kind: "number", key: "buffBarBorderWidth", label: "Stärke", suffix: "px" },
+    ],
+  },
+
+  // ===== Multiplikator-Anzeige · Faktor (X2) =====
+  "multiplier.factor": {
+    id: "multiplier.factor",
+    label: "Multiplikator · Faktor",
+    fields: [
+      ...textBaseFields({
+        size: "multiplierFactorText.fontSize",
+        color: "multiplierFactorText.color",
+      }),
+      ...shadowFields({
+        enabled: "multiplierFactorText.shadowEnabled",
+        color: "multiplierFactorText.shadowColor",
+        offsetX: "multiplierFactorText.shadowOffsetX",
+        offsetY: "multiplierFactorText.shadowOffsetY",
+        blur: "multiplierFactorText.shadowBlur",
+      }),
+      ...outlineFields({
+        enabled: "multiplierFactorText.outlineEnabled",
+        color: "multiplierFactorText.outlineColor",
+        size: "multiplierFactorText.outlineSize",
+      }),
+    ],
+  },
+
+  // ===== Multiplikator-Anzeige · Restzeit =====
+  "multiplier.timer": {
+    id: "multiplier.timer",
+    label: "Multiplikator · Restzeit",
+    fields: [
+      ...textBaseFields({
+        size: "multiplierTimerText.fontSize",
+        color: "multiplierTimerText.color",
+      }),
+      ...shadowFields({
+        enabled: "multiplierTimerText.shadowEnabled",
+        color: "multiplierTimerText.shadowColor",
+        offsetX: "multiplierTimerText.shadowOffsetX",
+        offsetY: "multiplierTimerText.shadowOffsetY",
+        blur: "multiplierTimerText.shadowBlur",
+      }),
+      ...outlineFields({
+        enabled: "multiplierTimerText.outlineEnabled",
+        color: "multiplierTimerText.outlineColor",
+        size: "multiplierTimerText.outlineSize",
+      }),
+    ],
+  },
+
+  // ===== Multiplikator-Anzeige · Wirkt auf =====
+  "multiplier.targets": {
+    id: "multiplier.targets",
+    label: "Multiplikator · Wirkt auf",
+    fields: [
+      ...textBaseFields({
+        size: "multiplierTargetsText.fontSize",
+        color: "multiplierTargetsText.color",
+      }),
+      ...shadowFields({
+        enabled: "multiplierTargetsText.shadowEnabled",
+        color: "multiplierTargetsText.shadowColor",
+        offsetX: "multiplierTargetsText.shadowOffsetX",
+        offsetY: "multiplierTargetsText.shadowOffsetY",
+        blur: "multiplierTargetsText.shadowBlur",
+      }),
+      ...outlineFields({
+        enabled: "multiplierTargetsText.outlineEnabled",
+        color: "multiplierTargetsText.outlineColor",
+        size: "multiplierTargetsText.outlineSize",
+      }),
     ],
   },
 };

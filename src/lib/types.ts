@@ -114,6 +114,8 @@ export interface AppSettings {
   tachoShowCenterValue: boolean; // großes "XX KMH" in der Mitte
   tachoNeedleColor: RGBA;
   tachoDialBgColor: RGBA;        // Hintergrund des Gauge-Kreises
+  tachoInactiveSegmentOpacity: number; // 0..1, Deckkraft der inaktiven Segmente
+  tachoInactiveLabelOpacity: number;   // 0..1, Deckkraft der inaktiven Labels + Ticks
 
   // Stream-HP (nur im MMO-Modus aktiv)
   streamHpEnabled: boolean;
@@ -150,6 +152,16 @@ export interface AppSettings {
   streamHpTextOutlineColor: RGBA;
   streamHpTextOutlineSize: number;
 
+  // Extraleben: Globaler Cap + Style der Herz-Anzeige über der HP-Leiste.
+  // Per-Skill (im `extraLife`-Effekt) wird Revive-HP% und Anzahl pro Trigger
+  // konfiguriert. 0 = Feature aus.
+  streamHpExtraLivesMax: number;
+  streamHpExtraLifeHeartColor: RGBA;
+  streamHpExtraLifeHeartSize: number;     // px im 450-Referenzraum
+  streamHpExtraLifeHeartGap: number;      // px Abstand zwischen Herzen
+  streamHpExtraLifeHeartOffsetY: number;  // px Abstand nach oben vom HP-Balken
+  streamHpExtraLifeReviveSoundPath: string | null; // optional: Sound beim Einlösen
+
   // Skills (nur MMO-Modus). Liste von Webhook-getriggerten Effekten mit
   // Bedingungen, Regeln und optionaler Wahrscheinlichkeit. Webhook:
   // GET /skill?id=<Skill.id>.
@@ -166,6 +178,13 @@ export interface AppSettings {
   //  - "framed": Slot mit dunklem Kasten/Rand (klassischer MMORPG-Look)
   //  - "clean":  Nur Icon + Texte, keine Kästen/Hintergründe (transparent)
   skillBarStyle: "framed" | "clean";
+
+  // Ausrichtung relativ zum Anker (skillBarX). Bestimmt, in welche Richtung
+  // sich die Leiste ausbreitet, wenn Skills hinzu-/wegkommen:
+  //  - "left":   Anker = linker Rand (Bar wächst nach rechts) — Default
+  //  - "center": Anker = Mitte (Bar wächst symmetrisch nach links + rechts)
+  //  - "right":  Anker = rechter Rand (Bar wächst nach links)
+  skillBarAlign: "left" | "center" | "right";
 
   // Glücksrad (Overlay-Element). Wird nur sichtbar, wenn gerade gedreht wird,
   // oder im Edit-Modus mit "Temporäre Elemente"-Toggle.
@@ -217,6 +236,32 @@ export interface AppSettings {
   buffBarTextOutlineEnabled: boolean;
   buffBarTextOutlineColor: RGBA;
   buffBarTextOutlineSize: number;
+
+  // ===== Multiplikator-Anzeige =====
+  // Dreizeiliger Widget über dem Overlay: Faktor ("X2"), Restzeit ("0:32"),
+  // betroffene Wirkungen ("(HEILUNG, SCHADEN)"). Position + uniforme Skalierung
+  // werden im Edit-Modus gesetzt; Stil je Zeile im Design-Modus.
+  multiplierX: number;
+  multiplierY: number;
+  multiplierScale: number;
+  multiplierFactorText: MultiplierTextStyle;
+  multiplierTimerText: MultiplierTextStyle;
+  multiplierTargetsText: MultiplierTextStyle;
+}
+
+// Stil-Block für eine der drei Multiplikator-Textzeilen. Jede Zeile ist
+// unabhängig stylebar (Schriftgröße, Farbe, Schatten, Umrandung).
+export interface MultiplierTextStyle {
+  fontSize: number;       // px im 450-Referenzraum
+  color: RGBA;
+  shadowEnabled: boolean;
+  shadowColor: RGBA;
+  shadowOffsetX: number;
+  shadowOffsetY: number;
+  shadowBlur: number;
+  outlineEnabled: boolean;
+  outlineColor: RGBA;
+  outlineSize: number;
 }
 
 // Eine Bedingungs-Gruppe (UND-verknüpft innerhalb). Felder mit null werden
@@ -237,6 +282,10 @@ export type SkillEffectKind =
   | "setLevel"
   | "multiplier"
   | "wheel"
+  | "freezeHp"        // HP-Drain für durationSec stoppen
+  | "healOverTime"    // amount HP/s für durationSec
+  | "damageOverTime"  // amount HP/s für durationSec
+  | "extraLife"       // +1..N Extraleben mit Revive bei `amount`% HP (global gecapt)
   | "none";
 
 // Ein Effekt im Skill-Baukasten. Alle Felder sind immer vorhanden (auch wenn
@@ -249,6 +298,11 @@ export type SkillEffectKind =
 //                        sollen durch diesen Buff multipliziert werden)
 //  - wheel:              segments[] — eine eigene Glücksrad-Drehung mit Sektoren
 //                        je eigener Wahrscheinlichkeit + eigenen Folge-Effekten
+//  - freezeHp:           durationSec — HP-Drain ist für die Dauer pausiert
+//  - healOverTime:       amount = HP pro Sekunde, durationSec = Gesamtdauer
+//  - damageOverTime:     amount = HP pro Sekunde, durationSec = Gesamtdauer
+//  - extraLife:          amount = Revive-HP% (0..100), level = Leben pro Trigger
+//                        (Stack wird global durch streamHpExtraLivesMax gecapt)
 //  - none:               Niete (keine Wirkung) — primär als Wheel-Segment nutzbar
 export interface SkillEffect {
   kind: SkillEffectKind;

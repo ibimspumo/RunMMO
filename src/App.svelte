@@ -10,6 +10,7 @@
   import SkillBar from "./lib/overlay/SkillBar.svelte";
   import LuckyWheel from "./lib/overlay/LuckyWheel.svelte";
   import BuffBar from "./lib/overlay/BuffBar.svelte";
+  import MultiplierDisplay from "./lib/overlay/MultiplierDisplay.svelte";
   import Settings from "./lib/settings/Settings.svelte";
   import Editor, { type EditTarget } from "./lib/editor/Editor.svelte";
   import Design from "./lib/design/Design.svelte";
@@ -25,6 +26,7 @@
     bindBackendEvents,
     soundUrlForLevel,
     streamHpDeathSoundUrl,
+    streamHpReviveSoundUrl,
     triggerHeal,
     triggerDamage,
     triggerSkill,
@@ -35,9 +37,19 @@
     setLevelOverride,
     registerMultiplier,
     multiplierFactorFor,
+    registerHpFreeze,
+    registerHpDot,
+    isHpFrozen,
+    activeHpDots,
     expireBuffsTick,
     enqueueWheelSpin,
     pickWheelSegmentIndex,
+    fakeMode,
+    getHpFloor,
+    grantExtraLife,
+    consumeExtraLife,
+    resetExtraLives,
+    extraLives,
   } from "./lib/stores";
   import { playPooled, primeAudioContext } from "./lib/audio-pool";
 
@@ -55,6 +67,7 @@
   let skillBarRef: SkillBar | undefined;
   let wheelRef: LuckyWheel | undefined;
   let buffBarRef: BuffBar | undefined;
+  let multiplierRef: MultiplierDisplay | undefined;
 
   // Edit-Modus: Toggle für temporäre Elemente (Glücksrad), damit man es
   // im Editor verschieben/skalieren kann, obwohl es zur Laufzeit nur
@@ -65,6 +78,47 @@
   const unsubSettings = settings.subscribe((v) => (cfg = v));
   const unsubState = ladderState.subscribe((v) => (state = v));
   const unsubPanel = settingsOpen.subscribe((v) => (panelOpen = v));
+
+  // Fake-Modus (F-Hotkey): HP-Floor verhindert 0 (in stores.ts), und ein
+  // Random-Heal-Scheduler bouncet die Leiste zwischen ~1% und ~5%, damit es
+  // organisch aussieht.
+  let fakeOn = false;
+  let fakeTimeoutHandle: number | null = null;
+  const unsubFake = fakeMode.subscribe((v) => {
+    fakeOn = v;
+    if (v) scheduleFakeHeal();
+    else stopFakeScheduler();
+  });
+
+  function stopFakeScheduler() {
+    if (fakeTimeoutHandle !== null) {
+      clearTimeout(fakeTimeoutHandle);
+      fakeTimeoutHandle = null;
+    }
+  }
+
+  function scheduleFakeHeal() {
+    stopFakeScheduler();
+    // Zufaelliges Intervall 250-1500ms — wirkt nicht mechanisch.
+    const delay = 250 + Math.random() * 1250;
+    fakeTimeoutHandle = window.setTimeout(() => {
+      fakeTimeoutHandle = null;
+      if (!fakeOn) return;
+      if (cfg.mode === "mmo" && cfg.streamHpEnabled && state.hp > 0) {
+        const trigger = cfg.streamHpMax * 0.05;
+        if (state.hp < trigger) {
+          // 1-3% von Max stille Heilung — kein Sound, kein Pulse, nur
+          // sichtbare Balken-Bewegung.
+          const amount = cfg.streamHpMax * (0.01 + Math.random() * 0.02);
+          ladderState.update((s) => ({
+            ...s,
+            hp: Math.min(cfg.streamHpMax, s.hp + amount),
+          }));
+        }
+      }
+      if (fakeOn) scheduleFakeHeal();
+    }, delay);
+  }
 
   // Timer-Loop (Frontend rendert die Restzeit, Backend hat die Wahrheit)
   let tickHandle: number | null = null;
@@ -84,12 +138,31 @@
         }));
       }
       if (cfg.mode === "mmo" && cfg.streamHpEnabled && state.hp > 0) {
-        const rate = hpDrainRatePerSec(cfg, state.currentLevel + 1);
-        if (rate > 0) {
-          ladderState.update((s) => ({
-            ...s,
-            hp: Math.max(0, s.hp - rate * dt),
-          }));
+        const floor = getHpFloor(cfg);
+        // Drain läuft nur, wenn kein Freeze aktiv ist.
+        if (!isHpFrozen()) {
+          const rate = hpDrainRatePerSec(cfg, state.currentLevel + 1);
+          if (rate > 0) {
+            ladderState.update((s) => ({
+              ...s,
+              hp: Math.max(floor, s.hp - rate * dt),
+            }));
+          }
+        }
+        // HoT/DoT: fraktional pro Frame mutieren — wie der Drain.
+        const dots = $activeHpDots;
+        if (dots.length > 0) {
+          let delta = 0;
+          for (const d of dots) {
+            if (d.expiresAtMs <= Date.now()) continue;
+            delta += (d.kind === "healOverTime" ? +1 : -1) * d.amountPerSec * dt;
+          }
+          if (delta !== 0) {
+            ladderState.update((s) => ({
+              ...s,
+              hp: Math.max(floor, Math.min(cfg.streamHpMax, s.hp + delta)),
+            }));
+          }
         }
       }
       // Abgelaufene Buffs (Multiplikator / Level-Override) entfernen. Wenn
@@ -119,14 +192,25 @@
   function playDeathSound() {
     playPooled(streamHpDeathSoundUrl(cfg), cfg.volumeDb, "death");
   }
+  function playReviveSound() {
+    playPooled(streamHpReviveSoundUrl(cfg), cfg.volumeDb, "heal");
+  }
 
   // Heal/Damage liegen in stores.ts, damit Webhooks und die Test-Buttons
   // im Settings-Panel exakt denselben Code ausführen (inkl. Pulse für Effekte).
 
-  // HP=0 → Death-Sound einmal abspielen. Re-Trigger nach Heilung > 0.
+  // HP=0: erst prüfen, ob ein Extraleben aufgebraucht werden kann — dann HP
+  // auffüllen + Revive-Sound (kein Death-Sound). Sonst Death-Sound einmal.
+  // Re-Trigger des Death-Sounds erst nach echter Heilung > 0.
   $: if (cfg.mode === "mmo" && cfg.streamHpEnabled && state.hp <= 0 && !deathSoundFired) {
-    deathSoundFired = true;
-    playDeathSound();
+    const reviveHp = $extraLives > 0 ? consumeExtraLife() : -1;
+    if (reviveHp > 0) {
+      ladderState.update((s) => ({ ...s, hp: reviveHp }));
+      playReviveSound();
+    } else {
+      deathSoundFired = true;
+      playDeathSound();
+    }
   }
   $: if (state.hp > 0 && deathSoundFired) {
     deathSoundFired = false;
@@ -200,6 +284,7 @@
   function resetLevel() {
     // Reset bricht aktiven Override und setzt Visible direkt auf 0.
     clearOverride();
+    resetExtraLives();
     const useTimer = cfg.mode === "simple";
     ladderState.update((s) => ({
       ...s,
@@ -230,7 +315,7 @@
 
   function printHelp() {
     console.log(
-      "Steuerung:\n  W/↑: Level hoch\n  S/↓: Level runter\n  R: Reset\n  T: Timer start/stop\n  P: +100 HP (Heal-Test)\n  M: −100 HP (Damage-Test)\n  H: Hilfe\n  E: Edit-Modus (Position/Skalierung)\n  D: Design-Modus (Stil)\n  ESC: Einstellungen",
+      "Steuerung:\n  W/↑: Level hoch\n  S/↓: Level runter\n  R: Reset\n  T: Timer start/stop\n  P: +100 HP (Heal-Test)\n  M: −100 HP (Damage-Test)\n  F: Fake-Modus (HP bleibt am Leben)\n  H: Hilfe\n  E: Edit-Modus (Position/Skalierung)\n  D: Design-Modus (Stil)\n  ESC: Einstellungen",
     );
   }
 
@@ -359,6 +444,46 @@
         });
         break;
       }
+      case "freezeHp": {
+        const f = multiplierFactorFor("freezeHp");
+        const dur = (eff.durationSec ?? 0) * f;
+        if (dur > 0) registerHpFreeze({ durationSec: dur, sourceSkillId });
+        break;
+      }
+      case "healOverTime": {
+        const f = multiplierFactorFor("healOverTime");
+        const amt = (eff.amount ?? 0) * f;
+        const dur = eff.durationSec ?? 0;
+        if (amt > 0 && dur > 0) {
+          registerHpDot({
+            kind: "healOverTime",
+            amountPerSec: amt,
+            durationSec: dur,
+            sourceSkillId,
+          });
+        }
+        break;
+      }
+      case "damageOverTime": {
+        const f = multiplierFactorFor("damageOverTime");
+        const amt = (eff.amount ?? 0) * f;
+        const dur = eff.durationSec ?? 0;
+        if (amt > 0 && dur > 0) {
+          registerHpDot({
+            kind: "damageOverTime",
+            amountPerSec: amt,
+            durationSec: dur,
+            sourceSkillId,
+          });
+        }
+        break;
+      }
+      case "extraLife": {
+        const count = Math.max(1, Math.floor(eff.level ?? 1));
+        const reviveHpPct = Math.max(1, Math.min(100, eff.amount ?? 50));
+        grantExtraLife({ count, reviveHpPct });
+        break;
+      }
       case "none":
         // Niete — nichts passiert.
         break;
@@ -433,10 +558,12 @@
 
   onDestroy(() => {
     stopTickLoop();
+    stopFakeScheduler();
     unsubSettings();
     unsubState();
     unsubPanel();
     unsubSkillFire();
+    unsubFake();
     unlistenResize?.();
     window.removeEventListener("keydown", onKeyDown);
   });
@@ -493,6 +620,15 @@
         break;
       case "h":
         printHelp();
+        break;
+      case "f":
+        if (cfg.mode === "mmo" && cfg.streamHpEnabled) {
+          fakeMode.update((v) => {
+            const next = !v;
+            console.log(`[fake-mode] ${next ? "ON" : "OFF"}`);
+            return next;
+          });
+        }
         break;
     }
   }
@@ -616,6 +752,20 @@
             buffBarSize: Math.max(14, Math.min(120, (w + h) / 2)),
           })),
       });
+      // Multiplikator-Anzeige: ein gesammeltes Element mit uniformer
+      // Skalierung. Die drei Textzeilen werden im Design-Modus einzeln
+      // gestylt — hier nur Position und Gesamtgröße.
+      ts.push({
+        id: "multiplier",
+        label: "Multiplikator",
+        kind: "uniform",
+        getElement: () => multiplierRef?.getElement(),
+        getLayout: () => ({ x: cfg.multiplierX, y: cfg.multiplierY }),
+        move: (x, y) =>
+          settings.update((s) => ({ ...s, multiplierX: x, multiplierY: y })),
+        getScale: () => cfg.multiplierScale,
+        setScale: (sc) => settings.update((s) => ({ ...s, multiplierScale: sc })),
+      });
     }
     return ts;
   }
@@ -649,6 +799,13 @@
     />
     <BuffBar
       bind:this={buffBarRef}
+      {cfg}
+      {editMode}
+      {designMode}
+      showInEditMode={showTemporaryInEdit}
+    />
+    <MultiplierDisplay
+      bind:this={multiplierRef}
       {cfg}
       {editMode}
       {designMode}

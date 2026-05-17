@@ -1,14 +1,21 @@
 <script lang="ts">
   // Buff-Leiste: zeigt aktive temporäre Status-Effekte als Pills/Badges.
-  //  - Multiplikator: "2×  0:42"
   //  - Level-Override: "→7 KMH  0:18"
-  // Wird nur gerendert, wenn mindestens ein Effekt aktiv ist (oder im
-  // Edit-Modus mit "Temp"-Toggle für Positionierung).
+  //  - HP-Freeze:      "❄ Freeze  0:18"
+  //  - HoT/DoT:        "+5/s  0:18" bzw. "−5/s  0:18"
+  // Multiplikatoren laufen über das eigene Widget `MultiplierDisplay` und
+  // erscheinen hier *nicht* mehr als Pill. Wird nur gerendert, wenn
+  // mindestens ein Effekt aktiv ist (oder im Edit-Modus mit "Temp"-Toggle
+  // für Positionierung).
 
   import { onMount, onDestroy } from "svelte";
-  import type { AppSettings, SkillEffectKind } from "../types";
+  import type { AppSettings } from "../types";
   import { rgbaToCss } from "../defaults";
-  import { activeMultipliers, activeLevelOverride } from "../stores";
+  import {
+    activeLevelOverride,
+    activeHpFreezes,
+    activeHpDots,
+  } from "../stores";
 
   export let cfg: AppSettings;
   export let editMode = false;
@@ -52,22 +59,6 @@
     return `${m}:${String(rem).padStart(2, "0")}`;
   }
 
-  // Kurzlabel für eine Multiplier-Kind-Liste (für Tooltip / kompakte Anzeige).
-  function shortKindList(kinds: SkillEffectKind[]): string {
-    const map: Record<SkillEffectKind, string> = {
-      heal: "Heal",
-      damage: "Damage",
-      levelUp: "Lvl↑",
-      levelDown: "Lvl↓",
-      levelReset: "Reset",
-      setLevel: "SetLvl",
-      multiplier: "Mult",
-      wheel: "Rad",
-      none: "—",
-    };
-    return kinds.map((k) => map[k] || k).join("/");
-  }
-
   $: autoScale = windowWidth / REFERENCE_WIDTH;
   $: leftPx = Math.round(cfg.buffBarX * autoScale);
   $: topPx = Math.round(cfg.buffBarY * autoScale);
@@ -109,16 +100,24 @@
         tone: "info",
       });
     }
-    for (const m of $activeMultipliers) {
-      const left = m.expiresAtMs - nowMs;
+    for (const f of $activeHpFreezes) {
+      const left = f.expiresAtMs - nowMs;
       if (left <= 0) continue;
-      const lbl = m.label
-        ? m.label
-        : `${m.factor}× ${shortKindList(m.multipliedKinds)}`;
       list.push({
-        key: m.id,
-        icon: `${m.factor}×`,
-        text: `${lbl}  ${formatMs(left)}`,
+        key: f.id,
+        icon: "❄",
+        text: `Freeze  ${formatMs(left)}`,
+        tone: "info",
+      });
+    }
+    for (const d of $activeHpDots) {
+      const left = d.expiresAtMs - nowMs;
+      if (left <= 0) continue;
+      const sign = d.kind === "healOverTime" ? "+" : "−";
+      list.push({
+        key: d.id,
+        icon: sign,
+        text: `${sign}${d.amountPerSec}/s  ${formatMs(left)}`,
         tone: "buff",
       });
     }

@@ -1,5 +1,12 @@
 <script lang="ts" context="module">
-  export type TargetId = "ladder" | "tacho" | "hp" | "skillbar" | "wheel" | "buffbar";
+  export type TargetId =
+    | "ladder"
+    | "tacho"
+    | "hp"
+    | "skillbar"
+    | "wheel"
+    | "buffbar"
+    | "multiplier";
 
   export interface EditTarget {
     id: TargetId;

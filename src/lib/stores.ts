@@ -41,7 +41,63 @@ export function streamHpDeathSoundUrl(cfg: AppSettings): string {
   return DEFAULT_DOWN_SOUND_URL;
 }
 
+// Revive-Sound URL für Extraleben: optional, kein Fallback.
+export function streamHpReviveSoundUrl(cfg: AppSettings): string | null {
+  return cfg.streamHpExtraLifeReviveSoundPath
+    ? convertFileSrc(cfg.streamHpExtraLifeReviveSoundPath)
+    : null;
+}
+
+// ===== Extraleben (Runtime, nicht persistiert) =====
+// Wird durch den `extraLife`-Skill-Effekt aufgebaut; bei HP=0 verbraucht der
+// Watch in App.svelte ein Leben und füllt HP auf `extraLifeReviveHpPct` Prozent.
+// Reset (R / resetLevel) leert den Stack. Das letzte gesetzte Revive-Prozent
+// gewinnt — pro Leben merken wir uns nichts (Settings-Antwort des Users).
+export const extraLives: Writable<number> = writable(0);
+export const extraLifeReviveHpPct: Writable<number> = writable(50);
+
+export function grantExtraLife(opts: {
+  count: number;
+  reviveHpPct: number;
+}): void {
+  const cfg = get(settings);
+  const cap = Math.max(0, Math.floor(cfg.streamHpExtraLivesMax));
+  if (cap <= 0) return;
+  const add = Math.max(0, Math.floor(opts.count));
+  if (add <= 0) return;
+  extraLives.update((n) => Math.min(cap, n + add));
+  if (Number.isFinite(opts.reviveHpPct)) {
+    extraLifeReviveHpPct.set(Math.max(1, Math.min(100, opts.reviveHpPct)));
+  }
+}
+
+// Verbraucht ein Leben (falls vorhanden) und liefert die HP-Menge, auf die
+// der Caller die Bar zurücksetzen soll. -1 = nichts zu verbrauchen.
+export function consumeExtraLife(): number {
+  const cur = get(extraLives);
+  if (cur <= 0) return -1;
+  extraLives.set(cur - 1);
+  const cfg = get(settings);
+  const pct = Math.max(1, Math.min(100, get(extraLifeReviveHpPct)));
+  return Math.max(1, Math.round((cfg.streamHpMax * pct) / 100));
+}
+
+export function resetExtraLives(): void {
+  extraLives.set(0);
+}
+
 export const settingsOpen: Writable<boolean> = writable(false);
+
+// Fake-Modus (nur Runtime, nicht persistiert): HP kann nicht unter den Floor
+// fallen, und ein Scheduler in App.svelte hilft mit stillen Random-Heals
+// nach. Floor = 1% von Max (mind. 1 HP), damit der Balken sichtbar bleibt
+// und der Death-Sound nicht triggert.
+export const fakeMode: Writable<boolean> = writable(false);
+
+export function getHpFloor(cfg: AppSettings): number {
+  if (!get(fakeMode)) return 0;
+  return Math.max(1, Math.round(cfg.streamHpMax * 0.01));
+}
 
 // Hilfsfunktionen: Asset-Pfade in URLs umwandeln.
 // imagePath-Format: null = Default | "gift:<key>" = Bibliothek | sonst = User-Pfad
@@ -374,9 +430,10 @@ export function triggerDamage(amount: number): void {
   const cfg = get(settings);
   if (cfg.mode !== "mmo" || !cfg.streamHpEnabled) return;
   if (!Number.isFinite(amount) || amount <= 0) return;
+  const floor = getHpFloor(cfg);
   ladderState.update((s) => ({
     ...s,
-    hp: Math.max(0, s.hp - amount),
+    hp: Math.max(floor, s.hp - amount),
   }));
   playHpSound(streamHpDamageSoundUrl(cfg), cfg.volumeDb, "damage");
   emitPulse("damage", amount);
@@ -607,10 +664,90 @@ export interface ActiveLevelOverride {
 export const activeMultipliers: Writable<ActiveMultiplier[]> = writable([]);
 export const activeLevelOverride: Writable<ActiveLevelOverride | null> = writable(null);
 
-// Multiplikator registrieren. Mehrere können gleichzeitig aktiv sein — sie
-// stapeln sich multiplikativ über das `factor`-Produkt aller, die ein Kind
-// abdecken. Bei gleicher source/factor wird der bestehende neu verlängert
-// (kein Stacking eines identischen Buffs).
+// HP-Freeze: solange mindestens einer aktiv ist, läuft der Decay nicht.
+// Mehrere können sich überlappen — der späteste expiresAtMs gewinnt.
+export interface ActiveHpFreeze {
+  id: string;
+  expiresAtMs: number;
+  startedAtMs: number;
+  durationMs: number;
+  sourceSkillId?: number;
+}
+export const activeHpFreezes: Writable<ActiveHpFreeze[]> = writable([]);
+
+// Heal-/Damage-over-Time: HP-Mutation pro Frame über die App.svelte-Tick-Loop.
+// `amountPerSec` ist immer positiv; Vorzeichen ergibt sich aus `kind`.
+export interface ActiveHpDot {
+  id: string;
+  kind: "healOverTime" | "damageOverTime";
+  amountPerSec: number;
+  expiresAtMs: number;
+  startedAtMs: number;
+  durationMs: number;
+  sourceSkillId?: number;
+}
+export const activeHpDots: Writable<ActiveHpDot[]> = writable([]);
+
+export function registerHpFreeze(opts: {
+  durationSec: number;
+  sourceSkillId?: number;
+}): void {
+  if (!Number.isFinite(opts.durationSec) || opts.durationSec <= 0) return;
+  const now = Date.now();
+  const durationMs = opts.durationSec * 1000;
+  const id = `freeze:${opts.sourceSkillId ?? "x"}`;
+  activeHpFreezes.update((list) => {
+    const filtered = list.filter((f) => f.id !== id);
+    filtered.push({
+      id,
+      expiresAtMs: now + durationMs,
+      startedAtMs: now,
+      durationMs,
+      sourceSkillId: opts.sourceSkillId,
+    });
+    return filtered;
+  });
+}
+
+export function registerHpDot(opts: {
+  kind: "healOverTime" | "damageOverTime";
+  amountPerSec: number;
+  durationSec: number;
+  sourceSkillId?: number;
+}): void {
+  if (!Number.isFinite(opts.amountPerSec) || opts.amountPerSec <= 0) return;
+  if (!Number.isFinite(opts.durationSec) || opts.durationSec <= 0) return;
+  const now = Date.now();
+  const durationMs = opts.durationSec * 1000;
+  const id = `${opts.kind}:${opts.sourceSkillId ?? "x"}`;
+  activeHpDots.update((list) => {
+    const filtered = list.filter((d) => d.id !== id);
+    filtered.push({
+      id,
+      kind: opts.kind,
+      amountPerSec: opts.amountPerSec,
+      expiresAtMs: now + durationMs,
+      startedAtMs: now,
+      durationMs,
+      sourceSkillId: opts.sourceSkillId,
+    });
+    return filtered;
+  });
+}
+
+export function isHpFrozen(nowMs?: number): boolean {
+  const now = nowMs ?? Date.now();
+  for (const f of get(activeHpFreezes)) {
+    if (f.expiresAtMs > now) return true;
+  }
+  return false;
+}
+
+// Multiplikator registrieren. Es gibt global nur **einen** aktiven Slot:
+// der bessere Faktor gewinnt. Ein neuer Trigger mit ≥ bestehendem Faktor
+// ersetzt den Slot komplett (inkl. frischer Restzeit + neuen Kinds). Ein
+// schwächerer Trigger wird verworfen — der laufende, bessere Buff läuft
+// ungestört weiter. So entsteht kein multiplikatives Stacking mehr.
 export function registerMultiplier(opts: {
   factor: number;
   durationSec: number;
@@ -621,18 +758,19 @@ export function registerMultiplier(opts: {
   if (!Number.isFinite(opts.factor) || opts.factor <= 0) return;
   if (!Number.isFinite(opts.durationSec) || opts.durationSec <= 0) return;
   const expiresAtMs = Date.now() + opts.durationSec * 1000;
-  const id = `${opts.sourceSkillId ?? "x"}:${opts.factor}:${(opts.multipliedKinds ?? []).slice().sort().join(",")}`;
+  const id = `mult:${opts.sourceSkillId ?? "x"}:${opts.factor}`;
+  const entry: ActiveMultiplier = {
+    id,
+    factor: opts.factor,
+    multipliedKinds: opts.multipliedKinds ?? [],
+    expiresAtMs,
+    sourceSkillId: opts.sourceSkillId,
+    label: opts.label,
+  };
   activeMultipliers.update((list) => {
-    const filtered = list.filter((m) => m.id !== id);
-    filtered.push({
-      id,
-      factor: opts.factor,
-      multipliedKinds: opts.multipliedKinds ?? [],
-      expiresAtMs,
-      sourceSkillId: opts.sourceSkillId,
-      label: opts.label,
-    });
-    return filtered;
+    const current = list[0];
+    if (!current || opts.factor >= current.factor) return [entry];
+    return list;
   });
 }
 
@@ -653,6 +791,8 @@ export function multiplierFactorFor(kind: SkillEffectKind, nowMs?: number): numb
 export function expireBuffsTick(nowMs?: number): { overrideExpired: ActiveLevelOverride | null } {
   const now = nowMs ?? Date.now();
   activeMultipliers.update((list) => list.filter((m) => m.expiresAtMs > now));
+  activeHpFreezes.update((list) => list.filter((f) => f.expiresAtMs > now));
+  activeHpDots.update((list) => list.filter((d) => d.expiresAtMs > now));
   const ov = get(activeLevelOverride);
   if (ov && ov.expiresAtMs <= now) {
     activeLevelOverride.set(null);

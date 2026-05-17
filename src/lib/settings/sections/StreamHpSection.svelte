@@ -31,6 +31,10 @@
     if (!cfg.streamHpDamageSoundPath) return;
     previewAudio(convertFileSrc(cfg.streamHpDamageSoundPath), cfg.volumeDb);
   }
+  function playRevive() {
+    if (!cfg.streamHpExtraLifeReviveSoundPath) return;
+    previewAudio(convertFileSrc(cfg.streamHpExtraLifeReviveSoundPath), cfg.volumeDb);
+  }
 
   function formatDecay(s: number): string {
     if (!s || !isFinite(s) || s <= 0) return "";
@@ -127,6 +131,39 @@
   <Callout variant="info">
     Tasten zum Testen im Overlay (nicht im Settings-Panel):
     <code>P</code> = +100 HP, <code>M</code> = −100 HP.
+  </Callout>
+</Card>
+
+<Card
+  title="Extraleben"
+  hint="Wenn die HP auf 0 fallen, wird ein Extraleben eingelöst und die Bar auf das im Skill konfigurierte Revive-Prozent zurückgesetzt (statt Death-Sound). Skills fügen Leben über den Effekt-Typ „Extraleben“ hinzu — bis zu diesem Cap."
+>
+  <Field
+    label="Maximale aktive Leben"
+    hint="Cap für den Stack. 0 = Feature aus."
+  >
+    <NumberInput
+      bind:value={cfg.streamHpExtraLivesMax}
+      min={0}
+      max={20}
+      step={1}
+      suffix="❤"
+    />
+  </Field>
+
+  <Field label="Revive-Sound (optional)" hint="Spielt beim Einlösen eines Lebens statt des Death-Sounds.">
+    <FilePicker
+      bind:value={cfg.streamHpExtraLifeReviveSoundPath}
+      placeholder="Kein Sound"
+      filters={audioFilters}
+      onPlay={playRevive}
+    />
+  </Field>
+
+  <Callout variant="info">
+    Position der Herzen folgt der HP-Leiste (rechtsbündig darüber). Herzfarbe,
+    Größe und Abstand stellst du im <strong>Design-Modus</strong> (Taste
+    <code>D</code>) ein — Klick direkt auf eines der Herzen.
   </Callout>
 </Card>
 

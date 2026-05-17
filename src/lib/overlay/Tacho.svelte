@@ -193,7 +193,7 @@
         <path
           d={arcPath(l.lvl)}
           fill={rgbaToCss(cfg.levelColors[l.lvl - 1])}
-          opacity={isActive ? 1 : isPast ? 0.9 : 0.28}
+          opacity={isActive ? 1 : isPast ? 0.9 : cfg.tachoInactiveSegmentOpacity}
           stroke={isActive ? rgbaToCss(cfg.activeOutlineColor) : "none"}
           stroke-width={isActive ? cfg.activeBarOutlineWidth : 0}
         />
@@ -208,7 +208,7 @@
           y2={l.tickOut.y}
           stroke={rgbaToCss(cfg.textColor)}
           stroke-width={l.lvl === currentLevel1Based ? 3 : 1.5}
-          opacity={l.lvl === currentLevel1Based ? 1 : 0.55}
+          opacity={l.lvl === currentLevel1Based ? 1 : cfg.tachoInactiveLabelOpacity}
         />
       {/each}
 
@@ -223,7 +223,7 @@
             font-family="LuckiestGuy, system-ui, sans-serif"
             text-anchor="middle"
             dominant-baseline="central"
-            opacity={l.lvl === currentLevel1Based ? 1 : 0.75}
+            opacity={l.lvl === currentLevel1Based ? 1 : cfg.tachoInactiveLabelOpacity}
             style="paint-order: stroke; stroke: rgba(0,0,0,0.85); stroke-width: 3px;"
           >
             {l.lvl}

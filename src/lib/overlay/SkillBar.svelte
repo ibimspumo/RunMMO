@@ -54,6 +54,16 @@
   $: leftPx = Math.round(cfg.skillBarX * autoScale);
   $: topPx = Math.round(cfg.skillBarY * autoScale);
 
+  // Ausrichtung: bestimmt, wo der Anker (leftPx) auf der Leiste liegt. Bei
+  // "center"/"right" schiebt sich die Leiste so, dass sie symmetrisch bzw.
+  // nach links wächst, statt nur nach rechts.
+  $: alignTranslateX =
+    cfg.skillBarAlign === "center"
+      ? "-50%"
+      : cfg.skillBarAlign === "right"
+        ? "-100%"
+        : "0";
+
   type SlotInfo = {
     skill: Skill;
     matchedRule: SkillRule | null;
@@ -106,6 +116,14 @@
         return `+${e.amount}`;
       case "damage":
         return `−${e.amount}`;
+      case "healOverTime":
+        return `+${e.amount}/s`;
+      case "damageOverTime":
+        return `−${e.amount}/s`;
+      case "freezeHp":
+        return `❄ ${e.durationSec ?? 0}s`;
+      case "extraLife":
+        return `+${e.level ?? 1} ❤`;
       case "levelUp":
         return "Lvl ↑";
       case "levelDown":
@@ -167,6 +185,7 @@
     left: {leftPx}px;
     top: {topPx}px;
     gap: {gapPx}px;
+    transform: translateX({alignTranslateX});
   "
 >
   {#each slots as info (info.skill.id)}

@@ -10,6 +10,7 @@
   import WebhookSection from "./sections/WebhookSection.svelte";
   import ColorsSection from "./sections/ColorsSection.svelte";
   import UpdateSection from "./sections/UpdateSection.svelte";
+  import ResetSection from "./sections/ResetSection.svelte";
   import Button from "../ui/Button.svelte";
   import { APP_VERSION } from "../version";
 
@@ -28,7 +29,8 @@
     | "skills"
     | "webhook"
     | "colors"
-    | "update";
+    | "update"
+    | "reset";
 
   type TabItem = { id: TabId; label: string; icon: string };
   type TabGroup = { label: string; items: TabItem[] };
@@ -54,7 +56,10 @@
     },
     {
       label: "System",
-      items: [{ id: "update", label: "Updates", icon: "↺" }],
+      items: [
+        { id: "update", label: "Updates", icon: "↺" },
+        { id: "reset", label: "Zurücksetzen", icon: "⟲" },
+      ],
     },
   ];
 
@@ -119,6 +124,8 @@
       <ColorsSection bind:cfg={draft} />
     {:else if activeTab === "update"}
       <UpdateSection />
+    {:else if activeTab === "reset"}
+      <ResetSection bind:cfg={draft} />
     {/if}
   </div>
 
