@@ -86,6 +86,19 @@ export function resetExtraLives(): void {
   extraLives.set(0);
 }
 
+// Skill-Effekt: Extraleben vom Stack entfernen, ohne HP anzufassen. Wenn
+// weniger Leben vorhanden sind als angefordert, werden nur so viele entfernt
+// wie da sind (kein-op, wenn 0). Liefert die tatsächlich entfernte Anzahl.
+export function removeExtraLives(count: number): number {
+  const n = Math.max(0, Math.floor(count));
+  if (n <= 0) return 0;
+  const cur = get(extraLives);
+  const take = Math.min(cur, n);
+  if (take <= 0) return 0;
+  extraLives.set(cur - take);
+  return take;
+}
+
 export const settingsOpen: Writable<boolean> = writable(false);
 
 // Fake-Modus (nur Runtime, nicht persistiert): HP kann nicht unter den Floor
@@ -517,16 +530,20 @@ export function skillCooldownRemainingMs(id: number): number {
   return Math.max(0, rt.cooldownUntilMs - Date.now());
 }
 
-// Bedingungs-Matching. Felder mit null werden ignoriert.
+// Bedingungs-Matching. Felder mit null/undefined werden ignoriert (alte
+// gespeicherte Configs haben extraLives-Felder noch nicht).
 function conditionGroupMatches(
   c: import("./types").ConditionGroup,
   level1Based: number,
   hpPct: number,
+  extraLivesCount: number,
 ): boolean {
   if (c.minKmh != null && level1Based < c.minKmh) return false;
   if (c.maxKmh != null && level1Based > c.maxKmh) return false;
   if (c.minHpPct != null && hpPct < c.minHpPct) return false;
   if (c.maxHpPct != null && hpPct > c.maxHpPct) return false;
+  if (c.minExtraLives != null && extraLivesCount < c.minExtraLives) return false;
+  if (c.maxExtraLives != null && extraLivesCount > c.maxExtraLives) return false;
   return true;
 }
 
@@ -534,18 +551,22 @@ export function ruleMatches(
   r: SkillRule,
   level1Based: number,
   hpPct: number,
+  extraLivesCount: number,
 ): boolean {
   if (r.conditions.length === 0) return true;
-  return r.conditions.some((c) => conditionGroupMatches(c, level1Based, hpPct));
+  return r.conditions.some((c) =>
+    conditionGroupMatches(c, level1Based, hpPct, extraLivesCount),
+  );
 }
 
 export function findMatchingRule(
   skill: Skill,
   level1Based: number,
   hpPct: number,
+  extraLivesCount: number,
 ): SkillRule | null {
   for (const r of skill.rules) {
-    if (ruleMatches(r, level1Based, hpPct)) return r;
+    if (ruleMatches(r, level1Based, hpPct, extraLivesCount)) return r;
   }
   return null;
 }
@@ -655,7 +676,7 @@ export function triggerSkill(id: number): string {
 
   const level1 = state.currentLevel + 1;
   const hpPct = currentHpPct(cfg, state);
-  const rule = findMatchingRule(skill, level1, hpPct);
+  const rule = findMatchingRule(skill, level1, hpPct, get(extraLives));
   if (!rule) return `skill #${id} no matching rule`;
 
   // Cooldown sofort setzen (auch bei probabilistischem Fehlschlag).
@@ -919,5 +940,5 @@ export function previewRule(skill: Skill): SkillRule | null {
   const state = get(ladderState);
   const level1 = state.currentLevel + 1;
   const hpPct = currentHpPct(cfg, state);
-  return findMatchingRule(skill, level1, hpPct);
+  return findMatchingRule(skill, level1, hpPct, get(extraLives));
 }

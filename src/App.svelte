@@ -50,6 +50,7 @@
     silentHeal,
     grantExtraLife,
     consumeExtraLife,
+    removeExtraLives,
     resetExtraLives,
     extraLives,
   } from "./lib/stores";
@@ -114,8 +115,21 @@
           // bis fast auf den Floor (~1%) runter kann bevor der naechste
           // Rettungs-Heal greift.
           if (Math.random() < 0.65) {
-            // 0.5%-3% Max — kleinere Heals = oft mehrere Versuche noetig.
-            const amount = cfg.streamHpMax * (0.005 + Math.random() * 0.025);
+            // Adaptiv an die Drain-Rate koppeln: jeder Heal kompensiert
+            // 2-5s Drain. Dadurch fuehlt sich Fake-Mode auf 1KMH (langsamer
+            // Drain → winziger Heal) genauso knapp an wie auf 12KMH
+            // (schneller Drain → grosser Heal), statt am Cap oder am Floor
+            // zu kleben.
+            const drainPerSec = hpDrainRatePerSec(cfg, state.currentLevel + 1);
+            // 1.2-2.5s Drain-Recovery pro Heal. Enger als vorher (war 2-5s),
+            // damit der anschliessende Drain-Down auf niedrigen Levels nicht
+            // ewig braucht — Bouncing bleibt knapp. Bei L12 wird die Menge
+            // ohnehin am maxHeal-Cap abgeschnitten (30 HP), L12-Feel bleibt.
+            const recoveryWindow = 1.2 + Math.random() * 1.3;
+            let amount = drainPerSec * recoveryWindow;
+            const minHeal = cfg.streamHpMax * 0.003;
+            const maxHeal = cfg.streamHpMax * 0.03;
+            amount = Math.max(minHeal, Math.min(maxHeal, amount));
             silentHeal(amount);
           }
         }
@@ -509,6 +523,13 @@
         const count = Math.max(1, Math.floor(eff.level ?? 1));
         const reviveHpPct = Math.max(1, Math.min(100, eff.amount ?? 50));
         grantExtraLife({ count, reviveHpPct });
+        break;
+      }
+      case "consumeExtraLife": {
+        // Entfernt N Extraleben vom Stack (kein-op, wenn keins vorhanden).
+        // HP bleibt unangetastet — anders als der Death-Revive in HpBar-Watch.
+        const n = Math.max(1, Math.floor(eff.level ?? 1));
+        removeExtraLives(n);
         break;
       }
       case "none":

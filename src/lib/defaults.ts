@@ -327,17 +327,17 @@ export function exampleHealSkill(): import("./types").Skill {
     soundPath: null,
     rules: [
       {
-        conditions: [{ minKmh: 1, maxKmh: 3, minHpPct: null, maxHpPct: null }],
+        conditions: [{ minKmh: 1, maxKmh: 3, minHpPct: null, maxHpPct: null, minExtraLives: null, maxExtraLives: null }],
         effects: [effect("heal", { amount: 250 })],
         probability: 100,
       },
       {
-        conditions: [{ minKmh: 4, maxKmh: 7, minHpPct: null, maxHpPct: null }],
+        conditions: [{ minKmh: 4, maxKmh: 7, minHpPct: null, maxHpPct: null, minExtraLives: null, maxExtraLives: null }],
         effects: [effect("heal", { amount: 150 })],
         probability: 80,
       },
       {
-        conditions: [{ minKmh: 8, maxKmh: 12, minHpPct: null, maxHpPct: null }],
+        conditions: [{ minKmh: 8, maxKmh: 12, minHpPct: null, maxHpPct: null, minExtraLives: null, maxExtraLives: null }],
         effects: [effect("heal", { amount: 75 })],
         probability: 50,
       },

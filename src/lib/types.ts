@@ -291,6 +291,8 @@ export interface ConditionGroup {
   maxKmh: number | null;
   minHpPct: number | null;  // 0..100 (inklusive)
   maxHpPct: number | null;
+  minExtraLives: number | null; // Anzahl aktuell gehaltener Extraleben
+  maxExtraLives: number | null;
 }
 
 export type SkillEffectKind =
@@ -306,6 +308,7 @@ export type SkillEffectKind =
   | "healOverTime"    // amount HP/s für durationSec
   | "damageOverTime"  // amount HP/s für durationSec
   | "extraLife"       // +1..N Extraleben mit Revive bei `amount`% HP (global gecapt)
+  | "consumeExtraLife" // -1..N Extraleben vom Stack entfernen (HP bleibt unverändert)
   | "none";
 
 // Ein Effekt im Skill-Baukasten. Alle Felder sind immer vorhanden (auch wenn
@@ -323,6 +326,8 @@ export type SkillEffectKind =
 //  - damageOverTime:     amount = HP pro Sekunde, durationSec = Gesamtdauer
 //  - extraLife:          amount = Revive-HP% (0..100), level = Leben pro Trigger
 //                        (Stack wird global durch streamHpExtraLivesMax gecapt)
+//  - consumeExtraLife:   level = Anzahl Extraleben, die vom Stack genommen
+//                        werden (kein-op wenn keins da). HP bleibt unangetastet.
 //  - none:               Niete (keine Wirkung) — primär als Wheel-Segment nutzbar
 export interface SkillEffect {
   kind: SkillEffectKind;

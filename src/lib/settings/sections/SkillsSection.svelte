@@ -38,6 +38,7 @@
     { value: "damageOverTime", label: "Schaden pro Sekunde", inWheel: true },
     { value: "freezeHp", label: "Leben einfrieren", inWheel: true },
     { value: "extraLife", label: "Extraleben (Revive)", inWheel: true },
+    { value: "consumeExtraLife", label: "Extraleben wegnehmen", inWheel: true },
     { value: "levelUp", label: "Level hoch", inWheel: true },
     { value: "levelDown", label: "Level runter", inWheel: true },
     { value: "levelReset", label: "Level reset", inWheel: true },
@@ -77,6 +78,8 @@
         return { ...base, durationSec: 10 };
       case "extraLife":
         return { ...base, amount: 50, level: 1 };
+      case "consumeExtraLife":
+        return { ...base, level: 1 };
       case "setLevel":
         return { ...base, level: 6, durationSec: 30 };
       case "multiplier":
@@ -197,6 +200,8 @@
       maxKmh: null,
       minHpPct: null,
       maxHpPct: null,
+      minExtraLives: null,
+      maxExtraLives: null,
     });
     bumpSkills();
   }
@@ -230,6 +235,8 @@
         return `❄ ${e.durationSec}s`;
       case "extraLife":
         return `+${e.level ?? 1} ❤ → ${e.amount ?? 50}%`;
+      case "consumeExtraLife":
+        return `−${e.level ?? 1} ❤`;
       case "levelUp":
         return "Level +1";
       case "levelDown":
@@ -613,6 +620,33 @@
                     title="ODER-Gruppe entfernen"
                   >✕</button>
                 </div>
+                <div class="cond-row">
+                  <span class="cond-label">Leben</span>
+                  <span class="cond-from">von</span>
+                  <input
+                    type="number"
+                    class="cond-input"
+                    min="0"
+                    max="99"
+                    placeholder="—"
+                    value={cond.minExtraLives ?? ""}
+                    on:input={(e) =>
+                      ((cond.minExtraLives = toNullableNumber(e.currentTarget.value)),
+                      bumpSkills())}
+                  />
+                  <span class="cond-from">bis</span>
+                  <input
+                    type="number"
+                    class="cond-input"
+                    min="0"
+                    max="99"
+                    placeholder="—"
+                    value={cond.maxExtraLives ?? ""}
+                    on:input={(e) =>
+                      ((cond.maxExtraLives = toNullableNumber(e.currentTarget.value)),
+                      bumpSkills())}
+                  />
+                </div>
               </div>
             {/each}
 
@@ -730,6 +764,22 @@
                     <span class="param-hint">
                       Cap & Anzeige werden in den Stream-HP-Settings konfiguriert
                       (max. {cfg.streamHpExtraLivesMax} aktiv).
+                    </span>
+                  </div>
+                {:else if eff.kind === "consumeExtraLife"}
+                  <div class="param-row">
+                    <span class="param-label">Leben entfernen</span>
+                    <NumberInput
+                      bind:value={eff.level}
+                      min={1}
+                      max={20}
+                      step={1}
+                      width="80px"
+                    />
+                    <span class="param-hint">
+                      Anzahl Extraleben, die vom Stack entfernt werden. HP bleibt
+                      unverändert. Tipp: mit der Bedingung „Leben ab 1" einen Slot
+                      bauen, der nur sichtbar ist, wenn ein Leben da ist.
                     </span>
                   </div>
                 {:else if eff.kind === "setLevel"}
@@ -946,6 +996,14 @@
                                 max={20}
                                 suffix="❤"
                                 width="80px"
+                              />
+                            {:else if segEff.kind === "consumeExtraLife"}
+                              <NumberInput
+                                bind:value={segEff.level}
+                                min={1}
+                                max={20}
+                                suffix="−❤"
+                                width="90px"
                               />
                             {:else if segEff.kind === "setLevel"}
                               <NumberInput

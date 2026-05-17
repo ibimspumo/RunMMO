@@ -14,6 +14,7 @@
     skillGiftUrl,
     skillRuntime,
     findMatchingRule,
+    extraLives,
   } from "../stores";
 
   export let cfg: AppSettings;
@@ -78,6 +79,7 @@
     state: LadderState,
     cfg: AppSettings,
     runtime: Record<number, { cooldownUntilMs: number }>,
+    livesCount: number,
     _tick: number,
   ): SlotInfo {
     const level1 = state.currentLevel + 1;
@@ -85,7 +87,7 @@
       cfg.streamHpEnabled
         ? (Math.max(0, state.hp) / Math.max(1, cfg.streamHpMax)) * 100
         : 100;
-    const matched = findMatchingRule(skill, level1, hpPct);
+    const matched = findMatchingRule(skill, level1, hpPct, livesCount);
     const preview = matched ?? skill.rules[0] ?? null;
     const rt = runtime[skill.id];
     const now = Date.now();
@@ -103,8 +105,9 @@
   }
 
   $: runtime = $skillRuntime;
+  $: livesCount = $extraLives;
   $: slots = cfg.skills
-    .map((s) => computeSlotInfo(s, state, cfg, runtime, cooldownTick))
+    .map((s) => computeSlotInfo(s, state, cfg, runtime, livesCount, cooldownTick))
     .filter((info) => cfg.skillBarShowInactive || info.matchedRule !== null);
 
   // === Status-Effekt-Text aus dem ersten Effekt der (Preview-)Regel ===
@@ -124,6 +127,8 @@
         return `❄ ${e.durationSec ?? 0}s`;
       case "extraLife":
         return `+${e.level ?? 1} ❤`;
+      case "consumeExtraLife":
+        return `−${e.level ?? 1} ❤`;
       case "levelUp":
         return "Lvl ↑";
       case "levelDown":

@@ -67,6 +67,7 @@
     multiplier: "MULT",
     wheel: "RAD",
     extraLife: "EXTRALEBEN",
+    consumeExtraLife: "−EXTRALEBEN",
     none: "—",
   };
   function germanKindList(kinds: SkillEffectKind[]): string {
