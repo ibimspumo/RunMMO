@@ -17,16 +17,36 @@
   $: outline = isActive
     ? `${cfg.activeBarOutlineWidth}px solid ${rgbaToCss(cfg.activeOutlineColor)}`
     : "none";
-  $: textShadow = cfg.textShadowEnabled
-    ? `${cfg.textShadowOffsetX}px ${cfg.textShadowOffsetY}px 0 ${rgbaToCss(cfg.textShadowColor)}`
+  // Level-Text — eigener Schatten + eigene Umrandung
+  $: levelTextShadow = cfg.textShadowEnabled
+    ? `${cfg.textShadowOffsetX}px ${cfg.textShadowOffsetY}px ${cfg.textShadowBlur}px ${rgbaToCss(cfg.textShadowColor)}`
     : "none";
-  $: outlineStyle = cfg.textOutlineEnabled
+  $: levelOutline = cfg.textOutlineEnabled
     ? buildOutline(cfg.textOutlineSize, rgbaToCss(cfg.textOutlineColor))
     : "none";
+  $: levelShadowAndOutline = joinShadows(levelTextShadow, levelOutline);
+
+  // Timer-Text — komplett eigene Werte (nicht mit Level-Text geteilt)
+  $: timerTextShadow = cfg.timerShadowEnabled
+    ? `${cfg.timerShadowOffsetX}px ${cfg.timerShadowOffsetY}px ${cfg.timerShadowBlur}px ${rgbaToCss(cfg.timerShadowColor)}`
+    : "none";
+  $: timerOutline = cfg.timerOutlineEnabled
+    ? buildOutline(cfg.timerOutlineSize, rgbaToCss(cfg.timerOutlineColor))
+    : "none";
+  $: timerShadowAndOutline = joinShadows(timerTextShadow, timerOutline);
+
   $: giftUrl = showGift ? imageUrlForLevel(level - 1, cfg) : null;
   $: timerText = !isRunning ? "STOP" : formatTime(timeLeft);
 
+  // text-shadow erlaubt mehrere Werte (komma-getrennt). Schatten + simulierte
+  // Outline zusammenfügen, "none" entsprechend filtern.
+  function joinShadows(a: string, b: string): string {
+    const parts = [a, b].filter((x) => x && x !== "none");
+    return parts.length === 0 ? "none" : parts.join(", ");
+  }
+
   function buildOutline(size: number, color: string): string {
+    if (size <= 0) return "none";
     const out: string[] = [];
     for (let dx = -size; dx <= size; dx++) {
       for (let dy = -size; dy <= size; dy++) {
@@ -56,7 +76,7 @@
           style="
             font-size: {cfg.timerTextSize}px;
             color: {rgbaToCss(cfg.timerColor)};
-            text-shadow: {textShadow}, {outlineStyle};
+            text-shadow: {timerShadowAndOutline};
           "
         >
           <span
@@ -95,7 +115,7 @@
       style="
         font-size: {cfg.levelTextSize}px;
         color: {rgbaToCss(cfg.textColor)};
-        text-shadow: {textShadow}, {outlineStyle};
+        text-shadow: {levelShadowAndOutline};
       "
     >
       <span

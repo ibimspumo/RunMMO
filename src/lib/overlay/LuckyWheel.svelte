@@ -351,7 +351,7 @@
             )}
           <div
             class="divider"
-            style="transform: rotate({total > 0 ? (acc / total) * 360 : 0}deg);"
+            style="transform: rotate({total > 0 ? (acc / total) * 360 + 180 : 180}deg);"
           ></div>
         {/each}
         <!-- Segment-Labels -->

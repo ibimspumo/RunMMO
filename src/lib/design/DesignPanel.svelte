@@ -115,8 +115,6 @@
         <NumberRow
           label={f.label}
           value={typeof nv === "number" ? nv : 0}
-          min={f.min}
-          max={f.max}
           step={f.step ?? 1}
           suffix={f.suffix ?? ""}
           hint={f.hint ?? ""}

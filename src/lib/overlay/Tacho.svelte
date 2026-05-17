@@ -137,12 +137,17 @@
   $: needleRotation = 90 - needleAngle;
 
   $: textShadow = cfg.textShadowEnabled
-    ? `${cfg.textShadowOffsetX}px ${cfg.textShadowOffsetY}px 0 ${rgbaToCss(cfg.textShadowColor)}`
+    ? `${cfg.textShadowOffsetX}px ${cfg.textShadowOffsetY}px ${cfg.textShadowBlur}px ${rgbaToCss(cfg.textShadowColor)}`
     : "none";
   $: outlineStyle = cfg.textOutlineEnabled
     ? buildOutline(cfg.textOutlineSize, rgbaToCss(cfg.textOutlineColor))
     : "none";
+  $: combinedShadow = (() => {
+    const parts = [textShadow, outlineStyle].filter((x) => x && x !== "none");
+    return parts.length === 0 ? "none" : parts.join(", ");
+  })();
   function buildOutline(size: number, color: string): string {
+    if (size <= 0) return "none";
     const out: string[] = [];
     for (let dx = -size; dx <= size; dx++) {
       for (let dy = -size; dy <= size; dy++) {
@@ -273,7 +278,7 @@
         style="
           color: {rgbaToCss(cfg.textColor)};
           font-size: {cfg.levelTextSize * 1.6}px;
-          text-shadow: {textShadow}, {outlineStyle};
+          text-shadow: {combinedShadow};
         "
       >
         {currentLevel1Based}<span class="unit">KMH</span>

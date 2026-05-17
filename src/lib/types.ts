@@ -50,16 +50,27 @@ export interface AppSettings {
   // Balken-Farben (12)
   levelColors: RGBA[];
 
-  // Text-Styling
+  // Text-Styling — Level-Text (Leiter)
   levelTextSize: number;
-  timerTextSize: number;
   textShadowEnabled: boolean;
   textShadowColor: RGBA;
   textShadowOffsetX: number;
   textShadowOffsetY: number;
+  textShadowBlur: number;
   textOutlineEnabled: boolean;
   textOutlineColor: RGBA;
   textOutlineSize: number;
+
+  // Text-Styling — Timer-Text (eigene Werte, nicht mit Level-Text geteilt)
+  timerTextSize: number;
+  timerShadowEnabled: boolean;
+  timerShadowColor: RGBA;
+  timerShadowOffsetX: number;
+  timerShadowOffsetY: number;
+  timerShadowBlur: number;
+  timerOutlineEnabled: boolean;
+  timerOutlineColor: RGBA;
+  timerOutlineSize: number;
 
   // Sonstige Farben
   inactiveBarColor: RGBA;
@@ -115,9 +126,29 @@ export interface AppSettings {
   streamHpFillColor: RGBA;
   streamHpBgColor: RGBA;
   streamHpBorderColor: RGBA;
-  streamHpTextColor: RGBA;
   streamHpShowNumbers: boolean;
   streamHpBorderRadius: number;         // px (0 = eckig, hoch = Pille)
+
+  // HP-Balken — Schatten & Umrandung (Container-Box)
+  streamHpBorderEnabled: boolean;
+  streamHpBorderWidth: number;
+  streamHpShadowEnabled: boolean;
+  streamHpShadowColor: RGBA;
+  streamHpShadowOffsetX: number;
+  streamHpShadowOffsetY: number;
+  streamHpShadowBlur: number;
+
+  // HP-Text (HP-Zahlen + Decay-Rate). Eigene Styling-Werte je Element.
+  streamHpTextColor: RGBA;
+  streamHpTextSize: number;             // px im 450-Referenzraum
+  streamHpTextShadowEnabled: boolean;
+  streamHpTextShadowColor: RGBA;
+  streamHpTextShadowOffsetX: number;
+  streamHpTextShadowOffsetY: number;
+  streamHpTextShadowBlur: number;
+  streamHpTextOutlineEnabled: boolean;
+  streamHpTextOutlineColor: RGBA;
+  streamHpTextOutlineSize: number;
 
   // Skills (nur MMO-Modus). Liste von Webhook-getriggerten Effekten mit
   // Bedingungen, Regeln und optionaler Wahrscheinlichkeit. Webhook:
@@ -135,11 +166,6 @@ export interface AppSettings {
   //  - "framed": Slot mit dunklem Kasten/Rand (klassischer MMORPG-Look)
   //  - "clean":  Nur Icon + Texte, keine Kästen/Hintergründe (transparent)
   skillBarStyle: "framed" | "clean";
-
-  // Globaler Stil der Default-Skill-Icons:
-  //  - "painterly": MMORPG-Painterly (Original, vibrant cel-shaded)
-  //  - "fluent":    Microsoft Fluent 3D Emoji (soft matte, friendly)
-  iconStyle: "painterly" | "fluent";
 
   // Glücksrad (Overlay-Element). Wird nur sichtbar, wenn gerade gedreht wird,
   // oder im Edit-Modus mit "Temporäre Elemente"-Toggle.
@@ -168,9 +194,29 @@ export interface AppSettings {
   buffBarSize: number;       // Pill-Höhe in 450-Referenzraum-px
   buffBarGap: number;        // Abstand zwischen Pills
   buffBarBgColor: RGBA;      // Hintergrund der Pill
-  buffBarTextColor: RGBA;    // Schriftfarbe
-  buffBarBorderColor: RGBA;  // Pill-Rand
   buffBarShowIcon: boolean;  // ✕/↑ Mini-Icon links anzeigen
+
+  // Pill-Container — Schatten & Umrandung
+  buffBarBorderColor: RGBA;
+  buffBarBorderEnabled: boolean;
+  buffBarBorderWidth: number;
+  buffBarShadowEnabled: boolean;
+  buffBarShadowColor: RGBA;
+  buffBarShadowOffsetX: number;
+  buffBarShadowOffsetY: number;
+  buffBarShadowBlur: number;
+
+  // Pill-Text
+  buffBarTextColor: RGBA;
+  buffBarTextSize: number;  // px im 450-Referenzraum (0 = auto aus Pill-Höhe)
+  buffBarTextShadowEnabled: boolean;
+  buffBarTextShadowColor: RGBA;
+  buffBarTextShadowOffsetX: number;
+  buffBarTextShadowOffsetY: number;
+  buffBarTextShadowBlur: number;
+  buffBarTextOutlineEnabled: boolean;
+  buffBarTextOutlineColor: RGBA;
+  buffBarTextOutlineSize: number;
 }
 
 // Eine Bedingungs-Gruppe (UND-verknüpft innerhalb). Felder mit null werden
@@ -243,10 +289,16 @@ export interface SkillTextStyle {
   fontSize: number;     // px im 450-Referenzraum
   weight: number;       // 100..900
   color: RGBA;
+  // Umrandung
+  outlineEnabled: boolean;
   outlineColor: RGBA;
   outlineSize: number;  // 0..6 px text-stroke
+  // Schatten — Offsets in px, Blur ersetzt früheres `shadowSize` (semantisch identisch).
+  shadowEnabled: boolean;
   shadowColor: RGBA;
-  shadowSize: number;   // 0..16 px blur
+  shadowOffsetX: number;
+  shadowOffsetY: number;
+  shadowSize: number;   // = Blur in px (Name aus Kompat-Gründen)
   // Position als Bruch (0..1) im Slot. 0.5 = Mitte, > 1 = außerhalb darunter.
   offsetX: number;
   offsetY: number;
@@ -263,8 +315,12 @@ export interface SkillGiftStyle {
   offsetX: number;
   offsetY: number;
   opacity: number;       // 0..1
-  shadowSize: number;    // 0..16 px drop-shadow blur (0 = aus)
+  // Schatten — Offsets in px, Blur ersetzt früheres `shadowSize` (semantisch identisch).
+  shadowEnabled: boolean;
   shadowColor: RGBA;
+  shadowOffsetX: number;
+  shadowOffsetY: number;
+  shadowSize: number;    // = Blur in px (Name aus Kompat-Gründen)
 }
 
 // Erste passende Rule feuert (Reihenfolge in `rules` = Priorität).
@@ -287,6 +343,10 @@ export interface Skill {
   giftIconPath: string | null;
   rules: SkillRule[];
   cooldownSec: number;
+  // Eigener Text für die Status-Anzeige im Skill-Slot. Leer ("") = aus dem
+  // (Preview-)Effekt der Regel automatisch ableiten (z.B. "+250" für Heal).
+  // Beliebiger Text, wird mit dem globalen skillValueText-Stil gerendert.
+  valueTextOverride: string;
 }
 
 export interface LadderState {

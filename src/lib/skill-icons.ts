@@ -44,9 +44,15 @@ export function availableStylesFor(key: string): IconStyle[] {
 }
 
 export interface SkillIconEntry {
-  key: string;
-  name: string;       // UI-Label (de)
+  // Eindeutiger Sentinel-Pfad. Format:
+  //   "default:<key>"          → Painterly (Default)
+  //   "default:fluent:<key>"   → Fluent (3D Emoji)
+  iconPath: string;
+  key: string;             // Basis-Key (z.B. "heal"), identisch für beide Stile
+  style: IconStyle;        // "painterly" oder "fluent"
+  name: string;            // UI-Label (de) — identisch für beide Stile
   category: SkillIconCategory;
+  url: string;             // pre-resolved URL ins gebündelte Asset
 }
 
 export type SkillIconCategory =
@@ -72,8 +78,14 @@ export const SKILL_CATEGORIES: { id: SkillIconCategory; label: string }[] = [
   { id: "misc", label: "Sonstiges" },
 ];
 
-// Master-Katalog. Reihenfolge bestimmt Anzeige im Picker.
-const RAW_CATALOG: SkillIconEntry[] = [
+// Master-Katalog (Konzept-Liste, ein Eintrag pro Subjekt). Reihenfolge
+// bestimmt Anzeige im Picker. Die Style-Varianten werden unten daraus expandiert.
+type RawEntry = {
+  key: string;
+  name: string;
+  category: SkillIconCategory;
+};
+const RAW_CATALOG: RawEntry[] = [
   // Heilung
   { key: "heal", name: "Heilung", category: "heal" },
   { key: "heal_medium", name: "Heilung (mittel)", category: "heal" },
@@ -162,30 +174,60 @@ const RAW_CATALOG: SkillIconEntry[] = [
   { key: "hourglass", name: "Sanduhr", category: "misc" },
 ];
 
-// Katalog: ein Eintrag erscheint, sobald er in MINDESTENS einem Stil existiert.
-// (Beim Generieren des Fluent-Sets kann es kurzfristig Lücken geben — der
-// Resolver fällt automatisch auf den anderen Stil zurück.)
-export const SKILL_CATALOG: SkillIconEntry[] = RAW_CATALOG.filter(
-  (e) => PAINTERLY_URLS[e.key] || FLUENT_URLS[e.key],
-);
+// Expandierter Katalog: pro Basis-Eintrag eine Variante je Stil (sofern das
+// Bild existiert). Sortierung: alphabetisch nach Name (locale-aware, de),
+// bei Gleichstand Painterly vor Fluent — so liegen die zwei Varianten eines
+// Subjekts direkt nebeneinander.
+export const SKILL_CATALOG: SkillIconEntry[] = (() => {
+  const out: SkillIconEntry[] = [];
+  for (const style of ["painterly", "fluent"] as IconStyle[]) {
+    const urls = style === "fluent" ? FLUENT_URLS : PAINTERLY_URLS;
+    const prefix = style === "fluent" ? "default:fluent:" : "default:";
+    for (const e of RAW_CATALOG) {
+      if (!urls[e.key]) continue;
+      out.push({
+        iconPath: `${prefix}${e.key}`,
+        key: e.key,
+        style,
+        name: e.name,
+        category: e.category,
+        url: urls[e.key],
+      });
+    }
+  }
+  out.sort((a, b) => {
+    const byName = a.name.localeCompare(b.name, "de", { sensitivity: "base" });
+    if (byName !== 0) return byName;
+    // Gleicher Name → Painterly zuerst (alphabetisch passt zufällig: p < f? Nein.
+    // Explizit: painterly < fluent in dieser Sortierung).
+    if (a.style === b.style) return 0;
+    return a.style === "painterly" ? -1 : 1;
+  });
+  return out;
+})();
 
-// Suche nach Eintrag (für Anzeige des aktuell gewählten Icons).
-export function findIconEntry(key: string): SkillIconEntry | null {
-  return SKILL_CATALOG.find((e) => e.key === key) ?? null;
+// Suche nach Eintrag über vollen iconPath (z.B. "default:fluent:heal").
+export function findIconEntry(iconPath: string): SkillIconEntry | null {
+  return SKILL_CATALOG.find((e) => e.iconPath === iconPath) ?? null;
 }
 
-// Resolver: gibt die URL für ein iconPath im Format "default:<key>" zurück.
-// Wenn der gewünschte Stil das Bild nicht hat → Fallback auf den anderen Stil.
-// Wenn beide leer → null.
-export function resolveDefaultIcon(
-  iconPath: string,
-  style: IconStyle = "painterly",
-): string | null {
+// Resolver: gibt die URL für ein iconPath im Format "default:[<style>:]<key>"
+// zurück. Wenn der gewünschte Stil das Bild nicht hat → Fallback auf den
+// anderen Stil. Wenn beide leer → null.
+export function resolveDefaultIcon(iconPath: string): string | null {
   if (!iconPath.startsWith("default:")) return null;
-  const key = iconPath.slice("default:".length);
-  const primary = iconUrlsForStyle(style);
+  let rest = iconPath.slice("default:".length);
+  let style: IconStyle = "painterly";
+  if (rest.startsWith("fluent:")) {
+    style = "fluent";
+    rest = rest.slice("fluent:".length);
+  } else if (rest.startsWith("painterly:")) {
+    style = "painterly";
+    rest = rest.slice("painterly:".length);
+  }
+  const key = rest;
+  const primary = style === "fluent" ? FLUENT_URLS : PAINTERLY_URLS;
   if (primary[key]) return primary[key];
-  // Fallback: der jeweils andere Stil.
   const fallback = style === "fluent" ? PAINTERLY_URLS : FLUENT_URLS;
   return fallback[key] ?? null;
 }

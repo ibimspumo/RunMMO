@@ -73,7 +73,27 @@
   $: topPx = Math.round(cfg.buffBarY * autoScale);
   $: heightPx = Math.round(cfg.buffBarSize * autoScale);
   $: gapPx = Math.round(cfg.buffBarGap * autoScale);
-  $: fontPx = Math.max(10, Math.round(heightPx * 0.52));
+  // Text-Größe: explizit aus Settings, oder 0 = auto aus Pill-Höhe.
+  $: fontPx =
+    cfg.buffBarTextSize > 0
+      ? Math.max(6, Math.round(cfg.buffBarTextSize * autoScale))
+      : Math.max(10, Math.round(heightPx * 0.52));
+
+  // Text-Schatten + Outline
+  $: pillTextShadow = cfg.buffBarTextShadowEnabled
+    ? `${cfg.buffBarTextShadowOffsetX}px ${cfg.buffBarTextShadowOffsetY}px ${cfg.buffBarTextShadowBlur}px ${rgbaToCss(cfg.buffBarTextShadowColor)}`
+    : "none";
+  $: pillTextStroke = cfg.buffBarTextOutlineEnabled
+    ? `${cfg.buffBarTextOutlineSize}px ${rgbaToCss(cfg.buffBarTextOutlineColor)}`
+    : "0 transparent";
+
+  // Container-Schatten + Umrandung
+  $: pillBoxShadow = cfg.buffBarShadowEnabled
+    ? `${cfg.buffBarShadowOffsetX}px ${cfg.buffBarShadowOffsetY}px ${cfg.buffBarShadowBlur}px ${rgbaToCss(cfg.buffBarShadowColor)}`
+    : "none";
+  $: pillBorderWidthPx = cfg.buffBarBorderEnabled
+    ? Math.max(0, cfg.buffBarBorderWidth)
+    : 0;
 
   // Auto-tick zwingt $: pills bei jedem Frame neu zu evaluieren (für Countdown).
   $: pills = (() => {
@@ -127,6 +147,10 @@
     --pill-bg: {bgCss};
     --pill-fg: {textCss};
     --pill-border: {borderCss};
+    --pill-border-w: {pillBorderWidthPx}px;
+    --pill-shadow: {pillBoxShadow};
+    --pill-text-shadow: {pillTextShadow};
+    --pill-text-stroke: {pillTextStroke};
   "
 >
   {#if pills.length === 0 && editMode && showInEditMode}
@@ -173,11 +197,15 @@
     border-radius: 999px;
     background: var(--pill-bg);
     color: var(--pill-fg);
-    border: 1px solid var(--pill-border);
+    border-style: solid;
+    border-width: var(--pill-border-w);
+    border-color: var(--pill-border);
     font-family: "LuckiestGuy", var(--font-display, system-ui), sans-serif;
     font-size: var(--pill-fs);
     line-height: 1;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+    box-shadow: var(--pill-shadow);
+    text-shadow: var(--pill-text-shadow);
+    -webkit-text-stroke: var(--pill-text-stroke);
     pointer-events: none;
     user-select: none;
     white-space: nowrap;
@@ -187,23 +215,8 @@
     border-color: rgba(56, 189, 248, 0.55);
     color: #e0f2fe;
   }
-  .pill.buff {
-    box-shadow:
-      0 0 0 1px rgba(250, 204, 21, 0.35),
-      0 4px 12px rgba(0, 0, 0, 0.45);
-  }
-  .pill.info {
-    box-shadow:
-      0 0 0 1px rgba(56, 189, 248, 0.4),
-      0 4px 12px rgba(0, 0, 0, 0.45);
-  }
   .pill-icon {
     font-size: calc(var(--pill-fs) * 1.05);
-    color: #fde68a;
-    -webkit-text-stroke: 0.5px rgba(0, 0, 0, 0.5);
-  }
-  .pill.info .pill-icon {
-    color: #7dd3fc;
   }
   .pill-text {
     letter-spacing: 0.4px;

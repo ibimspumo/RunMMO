@@ -4,18 +4,14 @@
   import {
     SKILL_CATALOG,
     SKILL_CATEGORIES,
-    iconUrlsForStyle,
     findIconEntry,
     resolveDefaultIcon,
   } from "../skill-icons";
-  import type { SkillIconCategory, IconStyle } from "../skill-icons";
+  import type { SkillIconCategory } from "../skill-icons";
   import { convertFileSrc } from "@tauri-apps/api/core";
 
-  // value-Format: null = kein Icon | "default:<key>" = gebündelt | sonstige = User-Pfad
+  // value-Format: null = kein Icon | "default:<key>" oder "default:fluent:<key>" = gebündelt | sonstige = User-Pfad
   export let value: string | null = null;
-  // Welcher Icon-Stil wird im Grid angezeigt? Wird vom Aufrufer aus den
-  // App-Settings durchgereicht — die Vorschau matcht dann die Live-Anzeige.
-  export let style: IconStyle = "painterly";
 
   const dispatch = createEventDispatcher<{ change: string | null }>();
 
@@ -23,19 +19,16 @@
   let activeCategory: SkillIconCategory | "all" = "all";
   let query = "";
 
-  // Aktuell verfügbare Icon-URLs für den ausgewählten Stil (für das Grid).
-  $: gridUrls = iconUrlsForStyle(style);
-
   // Aktuell ausgewähltes Icon: URL + Label für die Vorschau
-  $: currentEntry = value && value.startsWith("default:") ? findIconEntry(value.slice("default:".length)) : null;
+  $: currentEntry = value && value.startsWith("default:") ? findIconEntry(value) : null;
   $: currentUrl = (() => {
     if (!value) return null;
-    if (value.startsWith("default:")) return resolveDefaultIcon(value, style);
+    if (value.startsWith("default:")) return resolveDefaultIcon(value);
     return convertFileSrc(value);
   })();
   $: currentLabel = (() => {
     if (!value) return "Kein Icon";
-    if (currentEntry) return currentEntry.name;
+    if (currentEntry) return `${currentEntry.name} · ${currentEntry.style === "fluent" ? "Fluent" : "Painterly"}`;
     if (value.startsWith("default:")) return value.slice("default:".length);
     const parts = value.replace(/\\/g, "/").split("/");
     return parts[parts.length - 1];
@@ -50,8 +43,8 @@
     return true;
   });
 
-  function pick(key: string) {
-    dispatch("change", `default:${key}`);
+  function pick(iconPath: string) {
+    dispatch("change", iconPath);
     close();
   }
 
@@ -153,17 +146,19 @@
       </div>
 
       <div class="grid">
-        {#each filtered as entry (entry.key)}
-          {@const url = gridUrls[entry.key]}
-          {@const selected = value === `default:${entry.key}`}
+        {#each filtered as entry (entry.iconPath)}
+          {@const selected = value === entry.iconPath}
           <button
             class="grid-item"
             class:selected
-            on:click={() => pick(entry.key)}
-            title={entry.name}
+            on:click={() => pick(entry.iconPath)}
+            title={`${entry.name} (${entry.style})`}
           >
             <div class="grid-icon">
-              <img src={url} alt={entry.name} draggable="false" />
+              <img src={entry.url} alt={entry.name} draggable="false" />
+              <span class="style-badge" class:fluent={entry.style === "fluent"}>
+                {entry.style === "fluent" ? "F" : "P"}
+              </span>
             </div>
             <span class="grid-label">{entry.name}</span>
           </button>
@@ -426,6 +421,28 @@
     height: 88%;
     object-fit: contain;
     user-select: none;
+  }
+  .style-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: rgba(180, 120, 60, 0.85);
+    color: white;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
+    border: 1px solid rgba(0, 0, 0, 0.3);
+    font-family: var(--font-mono, monospace);
+  }
+  .style-badge.fluent {
+    background: rgba(56, 130, 200, 0.9);
+  }
+  .grid-icon {
+    position: relative;
   }
   .grid-label {
     font-size: 11px;

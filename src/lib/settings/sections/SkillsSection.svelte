@@ -135,6 +135,7 @@
       giftIconPath: null,
       rules: [newRule()],
       cooldownSec: 0,
+      valueTextOverride: "",
     };
   }
 
@@ -423,10 +424,9 @@
           <NumberInput bind:value={skill.id} min={1} max={9999} />
         </Field>
 
-        <Field label="Icon" hint="Bibliothek mit über 60 Default-Icons oder eigenes Bild hochladen.">
+        <Field label="Icon" hint="Bibliothek mit allen Stil-Varianten — Klick zum Wechseln. Oder eigenes Bild hochladen.">
           <SkillIconPicker
             value={skill.iconPath}
-            style={cfg.iconStyle ?? "painterly"}
             on:change={(e) => {
               skill.iconPath = e.detail;
               bumpSkills();
@@ -457,6 +457,18 @@
             max={3600}
             step={1}
             suffix="s"
+          />
+        </Field>
+
+        <Field
+          label="Slot-Text"
+          hint="Eigener Text unter dem Icon (z.B. „Rad“, „BOOM“, „+200“). Leer = automatisch aus dem Effekt der ersten Regel ableiten."
+        >
+          <input
+            type="text"
+            class="text-input"
+            bind:value={skill.valueTextOverride}
+            placeholder="Auto"
           />
         </Field>
 
@@ -864,25 +876,6 @@
     />
   </Field>
 
-  <Field
-    label="Icon-Stil"
-    hint={`Gilt global für alle Default-Icons. Painterly = MMORPG-Painterly (Original). Fluent = Microsoft-Fluent 3D Emoji (weich, freundlich, leicht spielzeughaft).`}
-  >
-    <div class="seg-row">
-      <button
-        type="button"
-        class="seg"
-        class:active={(cfg.iconStyle ?? "painterly") === "painterly"}
-        on:click={() => (cfg.iconStyle = "painterly")}
-      >Painterly</button>
-      <button
-        type="button"
-        class="seg"
-        class:active={cfg.iconStyle === "fluent"}
-        on:click={() => (cfg.iconStyle = "fluent")}
-      >Fluent</button>
-    </div>
-  </Field>
 </Card>
 
 <Callout variant="info">
@@ -1258,32 +1251,6 @@
     border: 1px dashed var(--c-border);
     border-radius: var(--r-sm);
     padding: 4px 6px;
-  }
-
-  .seg-row {
-    display: inline-flex;
-    background: var(--c-bg-3);
-    border: 1px solid var(--c-border);
-    border-radius: var(--r-sm);
-    overflow: hidden;
-  }
-  .seg {
-    background: transparent;
-    color: var(--c-text-muted);
-    border: none;
-    padding: 6px 14px;
-    font-size: var(--fs-sm);
-    font-family: inherit;
-    cursor: pointer;
-    transition: background var(--duration), color var(--duration);
-  }
-  .seg:hover {
-    background: var(--c-bg-4);
-    color: var(--c-text);
-  }
-  .seg.active {
-    background: var(--c-accent);
-    color: white;
   }
 
 </style>

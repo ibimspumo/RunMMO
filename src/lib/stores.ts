@@ -137,6 +137,7 @@ export async function loadSettings(): Promise<void> {
       merged.skills = merged.skills.map((s) => ({
         ...s,
         giftIconPath: s.giftIconPath ?? null,
+        valueTextOverride: s.valueTextOverride ?? "",
         rules: Array.isArray(s.rules)
           ? s.rules.map((r) => ({
               ...r,
@@ -381,14 +382,14 @@ export function triggerDamage(amount: number): void {
 
 // Icon-URL für einen Skill:
 //  - null → kein Icon
-//  - "default:<key>" → gebündeltes Default-Icon (aus skill-icons.ts), Stil
-//                       wird aus den aktuellen Settings gelesen (iconStyle).
+//  - "default:<key>" oder "default:fluent:<key>" → gebündeltes Default-Icon.
+//    Der Stil ist im iconPath kodiert; die globale iconStyle-Einstellung wird
+//    nicht mehr ausgewertet (jede Variante hat einen eigenen iconPath).
 //  - sonst → User-Pfad via convertFileSrc
 export function skillIconUrl(skill: Skill): string | null {
   if (!skill.iconPath) return null;
   if (skill.iconPath.startsWith("default:")) {
-    const style = get(settings).iconStyle ?? "painterly";
-    return resolveDefaultIcon(skill.iconPath, style);
+    return resolveDefaultIcon(skill.iconPath);
   }
   return convertFileSrc(skill.iconPath);
 }

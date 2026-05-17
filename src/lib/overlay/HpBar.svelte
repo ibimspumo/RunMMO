@@ -177,7 +177,28 @@
       ${fillBase} 100%)`;
 
   $: hpText = `${Math.ceil(state.hp)} / ${maxHp}`;
-  $: textPx = Math.max(12, barHeight * 0.65);
+  // Text-Größe: explizit aus Settings, oder 0 = auto aus Balkenhöhe.
+  $: textPx =
+    cfg.streamHpTextSize > 0
+      ? cfg.streamHpTextSize * autoScale
+      : Math.max(12, barHeight * 0.65);
+
+  // Text-Schatten + Outline (eigene Werte pro Text-Element)
+  $: hpTextShadow = cfg.streamHpTextShadowEnabled
+    ? `${cfg.streamHpTextShadowOffsetX}px ${cfg.streamHpTextShadowOffsetY}px ${cfg.streamHpTextShadowBlur}px ${rgbaToCss(cfg.streamHpTextShadowColor)}`
+    : "none";
+  $: hpTextOutlineStroke = cfg.streamHpTextOutlineEnabled
+    ? `${cfg.streamHpTextOutlineSize}px ${rgbaToCss(cfg.streamHpTextOutlineColor)}`
+    : "0 transparent";
+
+  // Container-Schatten (box-shadow)
+  $: hpBoxShadow = cfg.streamHpShadowEnabled
+    ? `${cfg.streamHpShadowOffsetX}px ${cfg.streamHpShadowOffsetY}px ${cfg.streamHpShadowBlur}px ${rgbaToCss(cfg.streamHpShadowColor)}`
+    : "none";
+  // Container-Umrandung
+  $: hpBorderWidthPx = cfg.streamHpBorderEnabled
+    ? Math.max(0, cfg.streamHpBorderWidth)
+    : 0;
 
   // Aktuelle Decay-Rate für das laufende Level — smart formatiert.
   $: currentLevel1Based = Math.max(1, Math.min(12, state.currentLevel + 1));
@@ -223,7 +244,9 @@
       height: {barHeight}px;
       background: {rgbaToCss(cfg.streamHpBgColor)};
       border-color: {rgbaToCss(cfg.streamHpBorderColor)};
+      border-width: {hpBorderWidthPx}px;
       border-radius: {radiusPx}px;
+      box-shadow: {hpBoxShadow};
     "
   >
     <div
@@ -245,6 +268,8 @@
         style="
           color: {rgbaToCss(cfg.streamHpTextColor)};
           font-size: {textPx}px;
+          text-shadow: {hpTextShadow};
+          -webkit-text-stroke: {hpTextOutlineStroke};
         "
       >
         <span
@@ -284,6 +309,8 @@
       style="
         color: {rgbaToCss(cfg.streamHpTextColor)};
         font-size: {decayPx}px;
+        text-shadow: {hpTextShadow};
+        -webkit-text-stroke: {hpTextOutlineStroke};
       "
     >
       <span
@@ -306,9 +333,7 @@
     position: relative;
     width: 100%;
     border-style: solid;
-    border-width: 2px;
     overflow: hidden;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
   }
   .hp-fill {
     position: absolute;
@@ -335,11 +360,6 @@
     font-family: "LuckiestGuy", var(--font-display, system-ui), sans-serif;
     letter-spacing: 1px;
     line-height: 1;
-    text-shadow:
-      2px 2px 0 rgba(0, 0, 0, 0.9),
-      -1px -1px 0 rgba(0, 0, 0, 0.6),
-      0 0 4px rgba(0, 0, 0, 0.5);
-    -webkit-text-stroke: 1px rgba(0, 0, 0, 0.85);
     user-select: none;
   }
   /* Inner span = exakte Text-Bbox. So bekommt der Design-Modus nur die
@@ -396,11 +416,6 @@
     letter-spacing: 0.5px;
     line-height: 1;
     opacity: 0.92;
-    text-shadow:
-      1px 1px 0 rgba(0, 0, 0, 0.9),
-      -1px -1px 0 rgba(0, 0, 0, 0.55),
-      0 0 3px rgba(0, 0, 0, 0.5);
-    -webkit-text-stroke: 1px rgba(0, 0, 0, 0.75);
     user-select: none;
   }
   .decay-text-inner {

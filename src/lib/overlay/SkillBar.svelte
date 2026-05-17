@@ -132,18 +132,18 @@
   function textStyleCss(style: SkillTextStyle, slotPx: number): string {
     const slotScale = slotPx / SLOT_REF_SIZE;
     const fontPx = Math.max(8, style.fontSize * slotScale);
-    const outlinePx = Math.max(0, style.outlineSize * slotScale);
-    const shadowPx = Math.max(0, style.shadowSize * slotScale);
-    const shadow =
-      shadowPx > 0
-        ? `0 0 ${shadowPx}px ${rgbaToCss(style.shadowColor)},
-           2px 2px ${Math.max(0, shadowPx * 0.5)}px ${rgbaToCss(style.shadowColor)}`
-        : "none";
+    const outlinePx = style.outlineEnabled ? Math.max(0, style.outlineSize * slotScale) : 0;
+    const stroke = style.outlineEnabled
+      ? `${outlinePx}px ${rgbaToCss(style.outlineColor)}`
+      : "0 transparent";
+    const shadow = style.shadowEnabled
+      ? `${style.shadowOffsetX * slotScale}px ${style.shadowOffsetY * slotScale}px ${Math.max(0, style.shadowSize * slotScale)}px ${rgbaToCss(style.shadowColor)}`
+      : "none";
     return `
       font-size: ${fontPx}px;
       font-weight: ${style.weight};
       color: ${rgbaToCss(style.color)};
-      -webkit-text-stroke: ${outlinePx}px ${rgbaToCss(style.outlineColor)};
+      -webkit-text-stroke: ${stroke};
       text-shadow: ${shadow};
     `;
   }
@@ -174,7 +174,8 @@
     {@const rule = info.previewRule}
     {@const iconUrl = skillIconUrl(skill)}
     {@const inactive = !info.active}
-    {@const valueTxt = valueTextFor(rule)}
+    {@const override = (skill.valueTextOverride ?? "").trim()}
+    {@const valueTxt = override !== "" ? override : valueTextFor(rule)}
     {@const chance = rule?.probability ?? 100}
     {@const showChance = chance < 100 && cfg.skillChanceText.enabled}
     {@const wheelDeg = Math.max(0, Math.min(360, chance * 3.6))}
@@ -227,8 +228,11 @@
           {@const giftPx = Math.max(4, slotPx * cfg.skillGiftStyle.sizeFrac)}
           {@const giftLeft = cfg.skillGiftStyle.offsetX * slotPx}
           {@const giftTop = cfg.skillGiftStyle.offsetY * slotPx}
-          {@const ds = cfg.skillGiftStyle.shadowSize}
-          {@const sc = cfg.skillGiftStyle.shadowColor}
+          {@const gs = cfg.skillGiftStyle}
+          {@const sc = gs.shadowColor}
+          {@const giftFilter = gs.shadowEnabled
+            ? `drop-shadow(${gs.shadowOffsetX}px ${gs.shadowOffsetY}px ${Math.max(0, gs.shadowSize)}px rgba(${Math.round(sc.r * 255)},${Math.round(sc.g * 255)},${Math.round(sc.b * 255)},${sc.a}))`
+            : 'none'}
           <img
             class="slot-gift"
             data-design-target={designMode ? "skill.gift" : null}
@@ -240,10 +244,8 @@
               height: {giftPx}px;
               left: {giftLeft}px;
               top: {giftTop}px;
-              opacity: {cfg.skillGiftStyle.opacity};
-              filter: {ds > 0
-                ? `drop-shadow(0 0 ${ds}px rgba(${Math.round(sc.r * 255)},${Math.round(sc.g * 255)},${Math.round(sc.b * 255)},${sc.a}))`
-                : 'none'};
+              opacity: {gs.opacity};
+              filter: {giftFilter};
             "
           />
         {/if}
