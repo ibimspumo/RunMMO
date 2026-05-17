@@ -2,10 +2,26 @@
 
 export type RGBA = { r: number; g: number; b: number; a: number };
 
+// Eintrag in der globalen Sound-Bibliothek. Sounds werden einmal pro Datei
+// importiert und überall referenziert über "sound:<id>". Pfad bleibt der
+// User-Pfad (via Tauri-Dialog), wird zum Abspielen mit convertFileSrc gelöst.
+export interface SoundEntry {
+  id: string;     // stabile id (z.B. "snd_1700000000_abc"), kollisionsarm
+  name: string;   // anzeigbarer Name (default = Dateiname ohne Extension)
+  path: string;   // absolutter User-Pfad
+}
+
+// Format-Konvention für Sound-Verweise:
+//  - null      → kein Sound (kein Fallback, außer das jeweilige Feld hat einen)
+//  - "sound:<id>" → Bibliothekseintrag (Standard für neue Verweise)
+//  - sonst     → roher User-Pfad (legacy aus alten Configs; wird beim
+//                Speichern bei Bedarf in die Bibliothek migriert)
+export type SoundRef = string | null;
+
 export interface LevelAssets {
   // Wenn null → Default-Asset für dieses Level verwenden (falls vorhanden)
   imagePath: string | null;
-  soundPath: string | null;
+  soundPath: SoundRef;
 }
 
 export type AppMode = "simple" | "mmo";
@@ -27,9 +43,13 @@ export interface AppSettings {
 
   // Audio
   volumeDb: number; // -80 .. 24
+  // Globale Sound-Bibliothek. Sounds werden einmal hochgeladen und überall
+  // per "sound:<id>" referenziert. Verwaltet im Audio-Tab; Picker in allen
+  // anderen Sections (Skills, Level, Stream-HP, …) greifen auf dieselbe Liste.
+  soundLibrary: SoundEntry[];
   // Optional globale Up/Down Sounds (legacy aus Godot); spielen falls Level-Sound leer
-  fallbackUpSoundPath: string | null;
-  fallbackDownSoundPath: string | null;
+  fallbackUpSoundPath: SoundRef;
+  fallbackDownSoundPath: SoundRef;
 
   // Timer
   levelDurationSeconds: number;
@@ -122,9 +142,9 @@ export interface AppSettings {
   streamHpMax: number;                  // Start-HP, z.B. 100
   streamHpSecondsPerHpByLevel: number[];// 12 Werte: Sekunden pro -1 HP je KMH-Level
   streamHpShowDecayRate: boolean;       // aktuelle Drain-Rate unter dem Balken anzeigen
-  streamHpDeathSoundPath: string | null;// optional: eigener Death-Sound
-  streamHpHealSoundPath: string | null; // Sound bei /heal
-  streamHpDamageSoundPath: string | null;// Sound bei /damage
+  streamHpDeathSoundPath: SoundRef;// optional: eigener Death-Sound
+  streamHpHealSoundPath: SoundRef; // Sound bei /heal
+  streamHpDamageSoundPath: SoundRef;// Sound bei /damage
   streamHpFillColor: RGBA;
   streamHpBgColor: RGBA;
   streamHpBorderColor: RGBA;
@@ -160,7 +180,7 @@ export interface AppSettings {
   streamHpExtraLifeHeartSize: number;     // px im 450-Referenzraum
   streamHpExtraLifeHeartGap: number;      // px Abstand zwischen Herzen
   streamHpExtraLifeHeartOffsetY: number;  // px Abstand nach oben vom HP-Balken
-  streamHpExtraLifeReviveSoundPath: string | null; // optional: Sound beim Einlösen
+  streamHpExtraLifeReviveSoundPath: SoundRef; // optional: Sound beim Einlösen
 
   // Skills (nur MMO-Modus). Liste von Webhook-getriggerten Effekten mit
   // Bedingungen, Regeln und optionaler Wahrscheinlichkeit. Webhook:
@@ -322,6 +342,11 @@ export interface SkillEffect {
   segments: WheelSegment[];
   // Optionales Label (z.B. an Niete oder zur Anzeige im Skill-Slot)
   label: string;
+
+  // Override-Sound für diesen einzelnen Effekt. Kaskade beim Abspielen:
+  //   effect.soundPath  >  wheelSegment.soundPath  >  skill.soundPath  >  ∅
+  // null = kein Override (es greift der nächsthöhere in der Kaskade).
+  soundPath: SoundRef;
 }
 
 // Ein Sektor des Glücksrads als Action. Wahrscheinlichkeiten werden vom System
@@ -333,6 +358,9 @@ export interface WheelSegment {
   color: RGBA;         // Sektor-Farbe
   weight: number;      // > 0
   effects: SkillEffect[];
+  // Sound, der einmal beim "Sektor-Treffer" abgespielt wird (Stufe zwischen
+  // Skill- und Effekt-Sound). null = Skill-Sound greift (oder kein Sound).
+  soundPath: SoundRef;
 }
 
 // Globaler Text-Stil für die zwei festen Text-Elemente auf jedem Skill-Slot
@@ -401,6 +429,10 @@ export interface Skill {
   // (Preview-)Effekt der Regel automatisch ableiten (z.B. "+250" für Heal).
   // Beliebiger Text, wird mit dem globalen skillValueText-Stil gerendert.
   valueTextOverride: string;
+  // Default-Sound für alle Effekte dieses Skills. Wird abgespielt, sobald
+  // ein Effekt feuert, sofern weder Effekt noch Wheel-Segment einen
+  // eigenen Sound vorgeben (siehe Kaskade an SkillEffect.soundPath).
+  soundPath: SoundRef;
 }
 
 export interface LadderState {

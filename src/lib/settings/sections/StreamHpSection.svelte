@@ -1,40 +1,16 @@
 <script lang="ts">
-  import { convertFileSrc } from "@tauri-apps/api/core";
   import type { AppSettings } from "../../types";
-  import { DEFAULT_DOWN_SOUND_URL } from "../../defaults";
   import {
     Callout,
     Card,
     Field,
-    FilePicker,
     NumberInput,
     SectionHeader,
+    SoundPicker,
     Toggle,
   } from "../../ui";
-  import { previewAudio } from "../../ui/audio-preview";
 
   export let cfg: AppSettings;
-
-  const audioFilters = [{ name: "Audio", extensions: ["mp3", "wav", "ogg", "m4a", "flac"] }];
-
-  function playDeath() {
-    const url = cfg.streamHpDeathSoundPath
-      ? convertFileSrc(cfg.streamHpDeathSoundPath)
-      : DEFAULT_DOWN_SOUND_URL;
-    previewAudio(url, cfg.volumeDb);
-  }
-  function playHeal() {
-    if (!cfg.streamHpHealSoundPath) return;
-    previewAudio(convertFileSrc(cfg.streamHpHealSoundPath), cfg.volumeDb);
-  }
-  function playDamage() {
-    if (!cfg.streamHpDamageSoundPath) return;
-    previewAudio(convertFileSrc(cfg.streamHpDamageSoundPath), cfg.volumeDb);
-  }
-  function playRevive() {
-    if (!cfg.streamHpExtraLifeReviveSoundPath) return;
-    previewAudio(convertFileSrc(cfg.streamHpExtraLifeReviveSoundPath), cfg.volumeDb);
-  }
 
   function formatDecay(s: number): string {
     if (!s || !isFinite(s) || s <= 0) return "";
@@ -96,35 +72,32 @@
 </Card>
 
 <Card title="Death-Sound" hint="Wird einmal ausgelöst, wenn HP auf 0 fällt. Re-trigger nach Reset / Heilung.">
-  <Field label="Sound-Datei">
-    <FilePicker
-      bind:value={cfg.streamHpDeathSoundPath}
+  <Field label="Sound">
+    <SoundPicker
+      value={cfg.streamHpDeathSoundPath}
       placeholder="Default (down.mp3)"
-      filters={audioFilters}
-      onPlay={playDeath}
+      on:change={(e) => (cfg.streamHpDeathSoundPath = e.detail)}
     />
   </Field>
 </Card>
 
 <Card
   title="Heal & Damage (Webhooks)"
-  hint="Trigger via GET /heal?amount=X bzw. /damage?amount=X. Ohne amount = 100. Sounds optional — nur abgespielt, wenn eine Datei gewählt ist."
+  hint="Trigger via GET /heal?amount=X bzw. /damage?amount=X. Ohne amount = 100. Sounds optional — nur abgespielt, wenn ein Sound gewählt ist."
 >
   <Field label="Heal-Sound (+HP)">
-    <FilePicker
-      bind:value={cfg.streamHpHealSoundPath}
+    <SoundPicker
+      value={cfg.streamHpHealSoundPath}
       placeholder="Kein Sound"
-      filters={audioFilters}
-      onPlay={playHeal}
+      on:change={(e) => (cfg.streamHpHealSoundPath = e.detail)}
     />
   </Field>
 
   <Field label="Damage-Sound (−HP)">
-    <FilePicker
-      bind:value={cfg.streamHpDamageSoundPath}
+    <SoundPicker
+      value={cfg.streamHpDamageSoundPath}
       placeholder="Kein Sound"
-      filters={audioFilters}
-      onPlay={playDamage}
+      on:change={(e) => (cfg.streamHpDamageSoundPath = e.detail)}
     />
   </Field>
 
@@ -152,11 +125,10 @@
   </Field>
 
   <Field label="Revive-Sound (optional)" hint="Spielt beim Einlösen eines Lebens statt des Death-Sounds.">
-    <FilePicker
-      bind:value={cfg.streamHpExtraLifeReviveSoundPath}
+    <SoundPicker
+      value={cfg.streamHpExtraLifeReviveSoundPath}
       placeholder="Kein Sound"
-      filters={audioFilters}
-      onPlay={playRevive}
+      on:change={(e) => (cfg.streamHpExtraLifeReviveSoundPath = e.detail)}
     />
   </Field>
 

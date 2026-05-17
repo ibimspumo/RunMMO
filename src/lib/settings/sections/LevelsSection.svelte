@@ -1,17 +1,9 @@
 <script lang="ts">
   import type { AppSettings } from "../../types";
-  import { FilePicker, GiftPicker, SectionHeader } from "../../ui";
-  import { imageUrlForLevel, soundUrlForLevel } from "../../stores";
-  import { previewAudio } from "../../ui/audio-preview";
+  import { GiftPicker, SectionHeader, SoundPicker } from "../../ui";
+  import { imageUrlForLevel } from "../../stores";
 
   export let cfg: AppSettings;
-
-  const sndFilters = [{ name: "Audio", extensions: ["mp3", "wav", "ogg", "m4a", "flac"] }];
-
-  function playPreview(idx: number) {
-    // Resolve mit Fallback: Level-Sound → globaler UP → Default-UP
-    previewAudio(soundUrlForLevel(idx, cfg, "up"), cfg.volumeDb);
-  }
 </script>
 
 <SectionHeader
@@ -45,11 +37,13 @@
             cfg.levels = cfg.levels;
           }}
         />
-        <FilePicker
-          bind:value={slot.soundPath}
+        <SoundPicker
+          value={slot.soundPath}
           placeholder="Fallback nutzen"
-          filters={sndFilters}
-          onPlay={() => playPreview(idx)}
+          on:change={(e) => {
+            slot.soundPath = e.detail;
+            cfg.levels = cfg.levels;
+          }}
         />
       </div>
     </div>

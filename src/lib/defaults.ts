@@ -33,6 +33,7 @@ export function defaultSettings(): AppSettings {
     })),
 
     volumeDb: -20,
+    soundLibrary: [],
     fallbackUpSoundPath: null,
     fallbackDownSoundPath: null,
 
@@ -307,6 +308,7 @@ function effect(
     multipliedKinds: [],
     segments: [],
     label: "",
+    soundPath: null,
     ...patch,
   };
 }
@@ -322,6 +324,7 @@ export function exampleHealSkill(): import("./types").Skill {
     giftIconPath: null,
     cooldownSec: 5,
     valueTextOverride: "",
+    soundPath: null,
     rules: [
       {
         conditions: [{ minKmh: 1, maxKmh: 3, minHpPct: null, maxHpPct: null }],

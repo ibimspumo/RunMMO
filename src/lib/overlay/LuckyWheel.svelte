@@ -114,7 +114,7 @@
     } else {
       const seg = spin.segments[spin.winningIndex];
       if (seg && seg.effects.length > 0) {
-        emitSkillFire(spin.skillId, seg.effects);
+        emitSkillFire(spin.skillId, seg.effects, seg.soundPath);
       }
     }
   }

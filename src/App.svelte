@@ -15,8 +15,9 @@
   import Editor, { type EditTarget } from "./lib/editor/Editor.svelte";
   import Design from "./lib/design/Design.svelte";
 
-  import type { AppSettings, LadderState, SkillEffect } from "./lib/types";
+  import type { AppSettings, LadderState, SkillEffect, SoundRef } from "./lib/types";
   import { defaultSettings } from "./lib/defaults";
+  import { resolveSoundUrl } from "./lib/sound-library";
   import {
     settings,
     ladderState,
@@ -46,6 +47,7 @@
     pickWheelSegmentIndex,
     fakeMode,
     getHpFloor,
+    silentHeal,
     grantExtraLife,
     consumeExtraLife,
     resetExtraLives,
@@ -99,21 +101,23 @@
 
   function scheduleFakeHeal() {
     stopFakeScheduler();
-    // Zufaelliges Intervall 250-1500ms — wirkt nicht mechanisch.
-    const delay = 250 + Math.random() * 1250;
+    // Grosse Streuung 300-3500ms — Balken hat Zeit, weiter zu draenen,
+    // bevor der naechste Heal kommt. Sieht wackeliger / spannender aus.
+    const delay = 300 + Math.random() * 3200;
     fakeTimeoutHandle = window.setTimeout(() => {
       fakeTimeoutHandle = null;
       if (!fakeOn) return;
       if (cfg.mode === "mmo" && cfg.streamHpEnabled && state.hp > 0) {
         const trigger = cfg.streamHpMax * 0.05;
         if (state.hp < trigger) {
-          // 1-3% von Max stille Heilung — kein Sound, kein Pulse, nur
-          // sichtbare Balken-Bewegung.
-          const amount = cfg.streamHpMax * (0.01 + Math.random() * 0.02);
-          ladderState.update((s) => ({
-            ...s,
-            hp: Math.min(cfg.streamHpMax, s.hp + amount),
-          }));
+          // Nicht jedes Mal heilen — 35% Chance auf Skip, damit HP wirklich
+          // bis fast auf den Floor (~1%) runter kann bevor der naechste
+          // Rettungs-Heal greift.
+          if (Math.random() < 0.65) {
+            // 0.5%-3% Max — kleinere Heals = oft mehrere Versuche noetig.
+            const amount = cfg.streamHpMax * (0.005 + Math.random() * 0.025);
+            silentHeal(amount);
+          }
         }
       }
       if (fakeOn) scheduleFakeHeal();
@@ -371,12 +375,35 @@
     );
   }
 
+  // Sound-Kaskade beim Skill-Effekt:
+  //   effect.soundPath > segment.soundPath > skill.soundPath > ∅
+  // Wird einmal pro Effekt gespielt, sobald applySkillEffect feuert.
+  function playSkillEffectSound(
+    eff: SkillEffect,
+    sourceSkillId: number | undefined,
+    segmentSoundPath: SoundRef,
+  ) {
+    let ref: SoundRef = eff.soundPath ?? null;
+    if (!ref) ref = segmentSoundPath;
+    if (!ref && sourceSkillId !== undefined) {
+      const sk = cfg.skills.find((s) => s.id === sourceSkillId);
+      ref = sk?.soundPath ?? null;
+    }
+    const url = resolveSoundUrl(cfg, ref);
+    if (url) playPooled(url, cfg.volumeDb, "skill");
+  }
+
   // Effekte vom Skill-Fire-Pulse anwenden. Heal/Damage gehen über die
   // bestehenden trigger-Helfer (inkl. Sound + Pulse), Level-Effekte über
   // die lokalen move-Funktionen (inkl. Level-Sound). Aktive Multiplier
   // skalieren bewertbare Werte (heal/damage-Beträge); Level-Effekte werden
   // grundsätzlich nicht multipliziert.
-  function applySkillEffect(eff: SkillEffect, sourceSkillId?: number) {
+  function applySkillEffect(
+    eff: SkillEffect,
+    sourceSkillId?: number,
+    segmentSoundPath: SoundRef = null,
+  ) {
+    playSkillEffectSound(eff, sourceSkillId, segmentSoundPath);
     switch (eff.kind) {
       case "heal": {
         const f = multiplierFactorFor("heal");
@@ -494,7 +521,8 @@
   const unsubSkillFire = skillFire.subscribe((fire) => {
     if (!fire || fire.seq === lastSkillFireSeq) return;
     lastSkillFireSeq = fire.seq;
-    for (const eff of fire.effects) applySkillEffect(eff, fire.skillId);
+    for (const eff of fire.effects)
+      applySkillEffect(eff, fire.skillId, fire.segmentSoundPath);
   });
 
   // === Aspect Ratio Lock (9:16) ===

@@ -17,6 +17,7 @@
     NumberInput,
     SectionHeader,
     SkillIconPicker,
+    SoundPicker,
     Toggle,
   } from "../../ui";
 
@@ -58,6 +59,7 @@
       multipliedKinds: [],
       segments: [],
       label: "",
+      soundPath: null,
     };
   }
 
@@ -88,9 +90,9 @@
         return {
           ...base,
           segments: [
-            { label: "Heal", color: { r: 0.13, g: 0.77, b: 0.37, a: 1 }, weight: 1, effects: [{ ...blankEffect("heal"), amount: 200 }] },
-            { label: "Damage", color: { r: 0.94, g: 0.27, b: 0.27, a: 1 }, weight: 1, effects: [{ ...blankEffect("damage"), amount: 100 }] },
-            { label: "Niete", color: { r: 0.4, g: 0.4, b: 0.45, a: 1 }, weight: 2, effects: [blankEffect("none")] },
+            { label: "Heal", color: { r: 0.13, g: 0.77, b: 0.37, a: 1 }, weight: 1, effects: [{ ...blankEffect("heal"), amount: 200 }], soundPath: null },
+            { label: "Damage", color: { r: 0.94, g: 0.27, b: 0.27, a: 1 }, weight: 1, effects: [{ ...blankEffect("damage"), amount: 100 }], soundPath: null },
+            { label: "Niete", color: { r: 0.4, g: 0.4, b: 0.45, a: 1 }, weight: 2, effects: [blankEffect("none")], soundPath: null },
           ],
         };
       default:
@@ -147,6 +149,7 @@
       rules: [newRule()],
       cooldownSec: 0,
       valueTextOverride: "",
+      soundPath: null,
     };
   }
 
@@ -252,6 +255,7 @@
       color: { r: 0.4, g: 0.5, b: 0.8, a: 1 },
       weight: 1,
       effects: [blankEffect("none")],
+      soundPath: null,
     });
     bumpSkills();
   }
@@ -479,6 +483,20 @@
             max={3600}
             step={1}
             suffix="s"
+          />
+        </Field>
+
+        <Field
+          label="Sound"
+          hint={"Wird bei jedem Effekt dieses Skills gespielt. Effekt- oder Wheel-Segment-Sounds überschreiben diesen (Kaskade: Effekt > Segment > Skill)."}
+        >
+          <SoundPicker
+            value={skill.soundPath}
+            placeholder="Kein Sound"
+            on:change={(e) => {
+              skill.soundPath = e.detail;
+              bumpSkills();
+            }}
           />
         </Field>
 
@@ -847,6 +865,23 @@
                           </span>
                         </div>
 
+                        <div class="param-row">
+                          <span class="param-label">Sound</span>
+                          <div class="sound-picker-wrap">
+                            <SoundPicker
+                              value={seg.soundPath}
+                              placeholder="Skill-Sound nutzen"
+                              on:change={(e) => {
+                                seg.soundPath = e.detail;
+                                bumpSkills();
+                              }}
+                            />
+                          </div>
+                          <span class="param-hint">
+                            Übersteuert den Skill-Sound für diesen Sektor.
+                          </span>
+                        </div>
+
                         <div class="sub-head">
                           <span class="sub-title">Effekte bei Treffer</span>
                           <span class="sub-hint">
@@ -980,6 +1015,23 @@
                     <Button variant="secondary" size="sm" on:click={() => addSegment(eff)}>
                       + Sektor
                     </Button>
+                  </div>
+                {/if}
+
+                <!-- Pro-Effekt-Sound (Override). Greift gegen den Skill-Sound. -->
+                {#if eff.kind !== "wheel"}
+                  <div class="param-row">
+                    <span class="param-label">Sound</span>
+                    <div class="sound-picker-wrap">
+                      <SoundPicker
+                        value={eff.soundPath}
+                        placeholder="Skill-Sound nutzen"
+                        on:change={(e) => {
+                          eff.soundPath = e.detail;
+                          bumpSkills();
+                        }}
+                      />
+                    </div>
                   </div>
                 {/if}
               </div>
@@ -1357,6 +1409,12 @@
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
+  }
+  /* SoundPicker greift seine Breite vom Container — innerhalb einer param-row
+     soll der Picker den verfügbaren Platz neben Label und Hint einnehmen. */
+  .sound-picker-wrap {
+    flex: 1;
+    min-width: 200px;
   }
   .kind-chip {
     display: inline-flex;

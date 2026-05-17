@@ -11,6 +11,7 @@ import type {
   SkillEffect,
   SkillEffectKind,
   SkillRule,
+  SoundRef,
   WheelSegment,
 } from "./types";
 import {
@@ -21,6 +22,7 @@ import {
 } from "./defaults";
 import { resolveDefaultIcon } from "./skill-icons";
 import { resolveGiftIcon } from "./gift-icons";
+import { resolveSoundUrl } from "./sound-library";
 import { playPooled, type AudioCategory } from "./audio-pool";
 
 const SETTINGS_FILE = "settings.json";
@@ -37,15 +39,13 @@ export const ladderState: Writable<LadderState> = writable({
 
 // Death-Sound URL: Custom Pfad oder Fallback auf bundled down.mp3
 export function streamHpDeathSoundUrl(cfg: AppSettings): string {
-  if (cfg.streamHpDeathSoundPath) return convertFileSrc(cfg.streamHpDeathSoundPath);
-  return DEFAULT_DOWN_SOUND_URL;
+  const u = resolveSoundUrl(cfg, cfg.streamHpDeathSoundPath);
+  return u ?? DEFAULT_DOWN_SOUND_URL;
 }
 
 // Revive-Sound URL für Extraleben: optional, kein Fallback.
 export function streamHpReviveSoundUrl(cfg: AppSettings): string | null {
-  return cfg.streamHpExtraLifeReviveSoundPath
-    ? convertFileSrc(cfg.streamHpExtraLifeReviveSoundPath)
-    : null;
+  return resolveSoundUrl(cfg, cfg.streamHpExtraLifeReviveSoundPath);
 }
 
 // ===== Extraleben (Runtime, nicht persistiert) =====
@@ -119,16 +119,21 @@ export function soundUrlForLevel(
   direction: "up" | "down",
 ): string | null {
   const slot = cfg.levels[level0];
-  if (slot?.soundPath) return convertFileSrc(slot.soundPath);
+  const slotUrl = resolveSoundUrl(cfg, slot?.soundPath ?? null);
+  if (slotUrl) return slotUrl;
   if (direction === "up") {
-    return cfg.fallbackUpSoundPath
-      ? convertFileSrc(cfg.fallbackUpSoundPath)
-      : DEFAULT_UP_SOUND_URL;
+    return (
+      resolveSoundUrl(cfg, cfg.fallbackUpSoundPath) ?? DEFAULT_UP_SOUND_URL
+    );
   } else {
-    return cfg.fallbackDownSoundPath
-      ? convertFileSrc(cfg.fallbackDownSoundPath)
-      : DEFAULT_DOWN_SOUND_URL;
+    return (
+      resolveSoundUrl(cfg, cfg.fallbackDownSoundPath) ?? DEFAULT_DOWN_SOUND_URL
+    );
   }
+}
+
+function migrateSoundRef(v: unknown): SoundRef {
+  return typeof v === "string" && v.length > 0 ? v : null;
 }
 
 // Migration: alte gespeicherte Effekte können nur `kind` + `amount` haben.
@@ -153,9 +158,11 @@ function migrateEffect(e: SkillEffect): SkillEffect {
               : { r: 0.5, g: 0.5, b: 0.5, a: 1 },
           weight: typeof s?.weight === "number" ? s.weight : 1,
           effects: Array.isArray(s?.effects) ? s.effects.map(migrateEffect) : [],
+          soundPath: migrateSoundRef((s as { soundPath?: unknown })?.soundPath),
         }))
       : [],
     label: typeof e?.label === "string" ? e.label : "",
+    soundPath: migrateSoundRef((e as { soundPath?: unknown })?.soundPath),
   };
   return out;
 }
@@ -198,12 +205,31 @@ export async function loadSettings(): Promise<void> {
         ...s,
         giftIconPath: s.giftIconPath ?? null,
         valueTextOverride: s.valueTextOverride ?? "",
+        soundPath: migrateSoundRef((s as { soundPath?: unknown }).soundPath),
         rules: Array.isArray(s.rules)
           ? s.rules.map((r) => ({
               ...r,
               effects: Array.isArray(r.effects) ? r.effects.map(migrateEffect) : [],
             }))
           : [],
+      }));
+    }
+    // Sound-Bibliothek: Default leer; alte Configs ohne das Feld werden hier
+    // korrigiert. Außerdem alle SoundRef-Felder normalisieren (leere Strings
+    // → null).
+    if (!Array.isArray(merged.soundLibrary)) merged.soundLibrary = [];
+    merged.fallbackUpSoundPath = migrateSoundRef(merged.fallbackUpSoundPath);
+    merged.fallbackDownSoundPath = migrateSoundRef(merged.fallbackDownSoundPath);
+    merged.streamHpDeathSoundPath = migrateSoundRef(merged.streamHpDeathSoundPath);
+    merged.streamHpHealSoundPath = migrateSoundRef(merged.streamHpHealSoundPath);
+    merged.streamHpDamageSoundPath = migrateSoundRef(merged.streamHpDamageSoundPath);
+    merged.streamHpExtraLifeReviveSoundPath = migrateSoundRef(
+      merged.streamHpExtraLifeReviveSoundPath,
+    );
+    if (Array.isArray(merged.levels)) {
+      merged.levels = merged.levels.map((lv) => ({
+        ...lv,
+        soundPath: migrateSoundRef(lv?.soundPath),
       }));
     }
     settings.set(merged);
@@ -356,15 +382,11 @@ export function getWebhookQueueLength(): number {
 
 // Sound-URLs für Heal/Damage (kein Fallback — wenn nicht gesetzt, kein Sound)
 export function streamHpHealSoundUrl(cfg: AppSettings): string | null {
-  return cfg.streamHpHealSoundPath
-    ? convertFileSrc(cfg.streamHpHealSoundPath)
-    : null;
+  return resolveSoundUrl(cfg, cfg.streamHpHealSoundPath);
 }
 
 export function streamHpDamageSoundUrl(cfg: AppSettings): string | null {
-  return cfg.streamHpDamageSoundPath
-    ? convertFileSrc(cfg.streamHpDamageSoundPath)
-    : null;
+  return resolveSoundUrl(cfg, cfg.streamHpDamageSoundPath);
 }
 
 // Pulse-Signal für die HP-Leiste, um Heal/Damage visuell zu zeigen.
@@ -404,6 +426,18 @@ function emitPulse(kind: "heal" | "damage", amount: number) {
   if (pulseRafHandle === null) {
     pulseRafHandle = requestAnimationFrame(flushPendingPulses);
   }
+}
+
+// Stiller Heal: HP rauf + visueller Pulse, ohne Sound. Für Fake-Modus.
+export function silentHeal(amount: number): void {
+  const cfg = get(settings);
+  if (cfg.mode !== "mmo" || !cfg.streamHpEnabled) return;
+  if (!Number.isFinite(amount) || amount <= 0) return;
+  ladderState.update((s) => ({
+    ...s,
+    hp: Math.min(cfg.streamHpMax, s.hp + amount),
+  }));
+  emitPulse("heal", amount);
 }
 
 // Sounds laufen über den Audio-Pool — siehe lib/audio-pool.ts. Kategorie-Cap
@@ -581,17 +615,26 @@ export function maybeStartNextSpin(): void {
 // Skill-Fire-Event: einmaliger Puls mit anzuwendenden Effekten + Skill-ID.
 // App.svelte hört darauf und mappt die Effekte auf die lokalen Aktionen
 // (heal/damage über stores, levelUp/Down/Reset über lokale Funktionen).
+//
+// `segmentSoundPath` ist gesetzt, wenn die Effekte aus einem Wheel-Segment
+// stammen — dann tritt die mittlere Stufe der Kaskade in Kraft
+// (effect > segment > skill). Bei Top-Level-Effekten ist es null.
 export type SkillFire = {
   skillId: number;
   effects: SkillEffect[];
+  segmentSoundPath: SoundRef;
   seq: number;
 };
 export const skillFire: Writable<SkillFire | null> = writable(null);
 
 let fireSeq = 0;
-export function emitSkillFire(skillId: number, effects: SkillEffect[]): void {
+export function emitSkillFire(
+  skillId: number,
+  effects: SkillEffect[],
+  segmentSoundPath: SoundRef = null,
+): void {
   fireSeq += 1;
-  skillFire.set({ skillId, effects, seq: fireSeq });
+  skillFire.set({ skillId, effects, segmentSoundPath, seq: fireSeq });
 }
 
 // Berechnet aktuelle Lebenspunkte in Prozent für Bedingungs-Matching.
