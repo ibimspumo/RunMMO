@@ -53,6 +53,8 @@
     removeExtraLives,
     resetExtraLives,
     extraLives,
+    activeSkillsFor,
+    isHpEffectKind,
   } from "./lib/stores";
   import { playPooled, primeAudioContext } from "./lib/audio-pool";
 
@@ -186,12 +188,11 @@
       }
       // Abgelaufene Buffs (Multiplikator / Level-Override) entfernen. Wenn
       // der Override gerade abläuft, zurück auf den Underlying-Level.
-      if (cfg.mode === "mmo") {
-        const exp = expireBuffsTick();
-        if (exp.overrideExpired) {
-          const back0 = exp.overrideExpired.underlyingLevel0;
-          ladderState.update((s) => ({ ...s, currentLevel: back0 }));
-        }
+      // Läuft in beiden Modi, weil Simple-Skills setLevel/multiplier nutzen.
+      const exp = expireBuffsTick();
+      if (exp.overrideExpired) {
+        const back0 = exp.overrideExpired.underlyingLevel0;
+        ladderState.update((s) => ({ ...s, currentLevel: back0 }));
       }
       tickHandle = requestAnimationFrame(tick);
     };
@@ -387,8 +388,10 @@
           },
         });
       },
-      (amount) => triggerHeal(amount),
-      (amount) => triggerDamage(amount),
+      // Aktive Multiplier wirken auch auf eingehende Heal/Damage-Webhooks
+      // — analog zur Behandlung im Skill-Effekt-Handler (applySkillEffect).
+      (amount) => triggerHeal(Math.round(amount * multiplierFactorFor("heal"))),
+      (amount) => triggerDamage(Math.round(amount * multiplierFactorFor("damage"))),
       (id) => {
         const status = triggerSkill(id);
         console.log("[skill]", status);
@@ -415,7 +418,7 @@
       ref = segmentSoundPath;
       offset = segmentSoundVolumeDb;
     } else if (sourceSkillId !== undefined) {
-      const sk = cfg.skills.find((s) => s.id === sourceSkillId);
+      const sk = activeSkillsFor(cfg).find((s) => s.id === sourceSkillId);
       if (sk?.soundPath) {
         ref = sk.soundPath;
         offset = sk.soundVolumeDb;
@@ -437,6 +440,10 @@
     segmentSoundPath: SoundRef = null,
     segmentSoundVolumeDb: number = 0,
   ) {
+    // HP-Effekte ergeben im Simple-Modus keinen Sinn (keine HP-Leiste) —
+    // still ignorieren, inkl. Sound. Schützt vor Effekten aus alten
+    // Configs oder versehentlich gespeicherten Skills.
+    if (cfg.mode !== "mmo" && isHpEffectKind(eff.kind)) return;
     playSkillEffectSound(eff, sourceSkillId, segmentSoundPath, segmentSoundVolumeDb);
     switch (eff.kind) {
       case "heal": {
@@ -770,29 +777,28 @@
         setSize: (w, h) => settings.update((s) => ({ ...s, hpWidth: w, hpHeight: h })),
       });
     }
-    if (c.mode === "mmo") {
-      // Skill-Leiste — kind "wh" mit dem Slot-Quadrat als Resize-Größe.
-      // skillBarSlotSize ist die einzige effektiv resize-bare Dimension
-      // (Breite = n*slotSize + (n-1)*gap), wir mappen W = H = slotSize.
-      ts.push({
-        id: "skillbar",
-        label: "Skill-Leiste",
-        kind: "wh",
-        getElement: () => skillBarRef?.getElement(),
-        getLayout: () => ({ x: cfg.skillBarX, y: cfg.skillBarY }),
-        move: (x, y) =>
-          settings.update((s) => ({ ...s, skillBarX: x, skillBarY: y })),
-        getSize: () => ({ w: cfg.skillBarSlotSize, h: cfg.skillBarSlotSize }),
-        // Slot ist quadratisch — wir nehmen den Mittelwert der vom Editor
-        // gemeldeten W/H, damit die Slot-Größe einheitlich bleibt.
-        setSize: (w, h) =>
-          settings.update((s) => ({
-            ...s,
-            skillBarSlotSize: Math.max(20, Math.min(200, (w + h) / 2)),
-          })),
-      });
-    }
-    if (c.mode === "mmo" && showTemp) {
+    // Skill-Leiste, Glücksrad, Buff-Leiste und Multiplikator sind in beiden
+    // Modi verfügbar (siehe oben in main: Komponenten rendern unbedingt). Die
+    // Inhalte (Skill-Liste) sind pro Modus getrennt, Position+Stil teilen sich
+    // die Modi — daher hier kein Mode-Guard mehr.
+    ts.push({
+      id: "skillbar",
+      label: "Skill-Leiste",
+      kind: "wh",
+      getElement: () => skillBarRef?.getElement(),
+      getLayout: () => ({ x: cfg.skillBarX, y: cfg.skillBarY }),
+      move: (x, y) =>
+        settings.update((s) => ({ ...s, skillBarX: x, skillBarY: y })),
+      getSize: () => ({ w: cfg.skillBarSlotSize, h: cfg.skillBarSlotSize }),
+      // Slot ist quadratisch — wir nehmen den Mittelwert der vom Editor
+      // gemeldeten W/H, damit die Slot-Größe einheitlich bleibt.
+      setSize: (w, h) =>
+        settings.update((s) => ({
+          ...s,
+          skillBarSlotSize: Math.max(20, Math.min(200, (w + h) / 2)),
+        })),
+    });
+    if (showTemp) {
       ts.push({
         id: "wheel",
         label: "Glücksrad",
@@ -863,29 +869,32 @@
     <HpBar bind:this={hpRef} {cfg} {state} {designMode} />
   {/if}
 
-  {#if cfg.mode === "mmo"}
-    <SkillBar bind:this={skillBarRef} {cfg} {state} {editMode} {designMode} />
-    <LuckyWheel
-      bind:this={wheelRef}
-      {cfg}
-      {editMode}
-      showInEditMode={showTemporaryInEdit}
-    />
-    <BuffBar
-      bind:this={buffBarRef}
-      {cfg}
-      {editMode}
-      {designMode}
-      showInEditMode={showTemporaryInEdit}
-    />
-    <MultiplierDisplay
-      bind:this={multiplierRef}
-      {cfg}
-      {editMode}
-      {designMode}
-      showInEditMode={showTemporaryInEdit}
-    />
-  {/if}
+  <!-- Skill-Leiste + Glücksrad + Buffs + Multiplikator funktionieren in
+       BEIDEN Modi. Die aktive Skill-Liste wird in den jeweiligen Komponenten
+       per `activeSkillsFor(cfg)` aus mode-spezifischen Settings-Arrays
+       (`skills` / `skillsSimple`) gezogen; HP-bezogene Effekte werden in
+       `applySkillEffect` automatisch ignoriert, wenn keine HP-Leiste da ist. -->
+  <SkillBar bind:this={skillBarRef} {cfg} {state} {editMode} {designMode} />
+  <LuckyWheel
+    bind:this={wheelRef}
+    {cfg}
+    {editMode}
+    showInEditMode={showTemporaryInEdit}
+  />
+  <BuffBar
+    bind:this={buffBarRef}
+    {cfg}
+    {editMode}
+    {designMode}
+    showInEditMode={showTemporaryInEdit}
+  />
+  <MultiplierDisplay
+    bind:this={multiplierRef}
+    {cfg}
+    {editMode}
+    {designMode}
+    showInEditMode={showTemporaryInEdit}
+  />
 
   {#if editMode}
     <Editor

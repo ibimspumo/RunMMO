@@ -170,6 +170,7 @@ export function defaultSettings(): AppSettings {
     streamHpExtraLifeReviveSoundVolumeDb: 0,
 
     skills: [exampleHealSkill()],
+    skillsSimple: [],
 
     skillBarX: 55,
     skillBarY: 470,
@@ -177,6 +178,7 @@ export function defaultSettings(): AppSettings {
     skillBarGap: 8,
     skillBarShowInactive: true,
     skillBarStyle: "framed",
+    skillBarOrientation: "horizontal",
     skillBarAlign: "left",
 
     wheelX: 75,

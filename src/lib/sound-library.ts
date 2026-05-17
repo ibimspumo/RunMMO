@@ -98,7 +98,8 @@ export function countSoundRefs(cfg: AppSettings, soundId: string): number {
   test(cfg.streamHpDamageSoundPath);
   test(cfg.streamHpExtraLifeReviveSoundPath);
   for (const lv of cfg.levels) test(lv.soundPath);
-  for (const sk of cfg.skills) {
+  // Beide Skill-Listen (MMO + Simple) scannen.
+  for (const sk of [...cfg.skills, ...cfg.skillsSimple]) {
     test(sk.soundPath);
     for (const r of sk.rules) {
       for (const e of r.effects) {

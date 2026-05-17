@@ -229,9 +229,12 @@ export async function loadSettings(): Promise<void> {
     while (arr.length < 12) arr.push(fallback[arr.length]);
     merged.streamHpSecondsPerHpByLevel = arr;
 
-    // Migration: alte Skills haben kein giftIconPath-Feld.
-    if (Array.isArray(merged.skills)) {
-      merged.skills = merged.skills.map((s) => ({
+    // Migration: alte Skills haben kein giftIconPath-Feld. Wird für beide
+    // Listen (mmo + simple) angewendet — die Simple-Liste ist neu und kann
+    // in alten Configs fehlen, dann legen wir sie leer an.
+    const migrateSkillList = (list: unknown): Skill[] => {
+      if (!Array.isArray(list)) return [];
+      return list.map((s) => ({
         ...s,
         giftIconPath: s.giftIconPath ?? null,
         valueTextOverride: s.valueTextOverride ?? "",
@@ -240,7 +243,7 @@ export async function loadSettings(): Promise<void> {
           (s as { soundVolumeDb?: unknown }).soundVolumeDb,
         ),
         rules: Array.isArray(s.rules)
-          ? s.rules.map((r) => ({
+          ? s.rules.map((r: SkillRule) => ({
               ...r,
               effects: Array.isArray(r.effects) ? r.effects.map(migrateEffect) : [],
               successSoundPath: migrateSoundRef(
@@ -257,8 +260,10 @@ export async function loadSettings(): Promise<void> {
               ),
             }))
           : [],
-      }));
-    }
+      })) as Skill[];
+    };
+    merged.skills = migrateSkillList(merged.skills);
+    merged.skillsSimple = migrateSkillList(merged.skillsSimple);
     // Sound-Bibliothek: Default leer; alte Configs ohne das Feld werden hier
     // korrigiert. Außerdem alle SoundRef-Felder normalisieren (leere Strings
     // → null) und parallele VolumeDb-Felder auffüllen.
@@ -401,6 +406,17 @@ export async function bindBackendEvents(
       case "status":
         if (p.replyId) onStatusRequest(p.replyId);
         return;
+      case "fake": {
+        const c = get(settings);
+        if (c.mode === "mmo" && c.streamHpEnabled) {
+          fakeMode.update((v) => {
+            const next = !v;
+            console.log(`[fake-mode] ${next ? "ON" : "OFF"} (webhook)`);
+            return next;
+          });
+        }
+        return;
+      }
     }
     // Effekt-Befehle: ggf. in Queue, sonst sofort.
     const queued = get(settings).webhookProcessingMode === "queued";
@@ -727,13 +743,21 @@ function currentHpPct(cfg: AppSettings, state: LadderState): number {
   return (Math.max(0, state.hp) / Math.max(1, cfg.streamHpMax)) * 100;
 }
 
+// Liefert die Skill-Liste, die im aktuellen Modus aktiv ist. MMO nutzt
+// `skills`, Simple nutzt `skillsSimple` — beide haben dieselbe Struktur,
+// aber inhaltlich getrennt (sodass der User pro Modus eigene Slots
+// konfigurieren kann).
+export function activeSkillsFor(cfg: AppSettings): Skill[] {
+  return cfg.mode === "simple" ? cfg.skillsSimple : cfg.skills;
+}
+
 // Skill-Trigger (vom Webhook /skill?id=N aufgerufen).
 // Liefert einen kurzen Status-String zurück (für Debug-Logs).
 export function triggerSkill(id: number): string {
   const cfg = get(settings);
   const state = get(ladderState);
-  if (cfg.mode !== "mmo") return "skill ignored (not mmo mode)";
-  const skill = cfg.skills.find((s) => s.id === id);
+  const list = activeSkillsFor(cfg);
+  const skill = list.find((s) => s.id === id);
   if (!skill) return `skill #${id} not found`;
   if (isSkillOnCooldown(id)) return `skill #${id} on cooldown`;
 
@@ -998,6 +1022,23 @@ export function pickWheelSegmentIndex(segments: WheelSegment[]): number {
     if (r <= 0) return i;
   }
   return weights.length - 1;
+}
+
+// Liste aller Skill-Effekt-Kinds, die ohne HP-Leiste keinen Sinn ergeben.
+// Wird im Simple-Modus zur Filterung in der Skill-Editor-UI verwendet und
+// als Sicherheitsnetz beim Anwenden von Effekten (still ignoriert).
+export const HP_EFFECT_KINDS: ReadonlyArray<SkillEffectKind> = [
+  "heal",
+  "damage",
+  "healOverTime",
+  "damageOverTime",
+  "freezeHp",
+  "extraLife",
+  "consumeExtraLife",
+];
+
+export function isHpEffectKind(kind: SkillEffectKind): boolean {
+  return HP_EFFECT_KINDS.includes(kind);
 }
 
 // Hilfsfunktion für SkillBar: liefert für einen Skill die aktuell "scheinbar"

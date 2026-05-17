@@ -192,10 +192,18 @@ export interface AppSettings {
   streamHpExtraLifeReviveSoundPath: SoundRef; // optional: Sound beim Einlösen
   streamHpExtraLifeReviveSoundVolumeDb: number;
 
-  // Skills (nur MMO-Modus). Liste von Webhook-getriggerten Effekten mit
+  // Skills für den MMO-Modus. Liste von Webhook-getriggerten Effekten mit
   // Bedingungen, Regeln und optionaler Wahrscheinlichkeit. Webhook:
   // GET /skill?id=<Skill.id>.
   skills: Skill[];
+
+  // Separate Skill-Liste für den Simple-Modus. Inhalt-getrennt, aber Position
+  // und Stil der Skill-Leiste (skillBarX/Y, Slot-Größe, Design-Schemas) sind
+  // mit dem MMO-Modus geteilt. HP-bezogene Effekte (heal/damage/HoT/DoT/
+  // freeze/extraLife) werden im Simple-Modus stillschweigend ignoriert —
+  // dort gibt es keine HP-Leiste. Sinnvoll bleiben Level-Effekte, Multi-
+  // plikator, Glücksrad und Niete.
+  skillsSimple: Skill[];
 
   // Skill-Leiste (Overlay-Element, Edit-Mode). Werte in 450px-Referenzraum.
   skillBarX: number;
@@ -209,11 +217,16 @@ export interface AppSettings {
   //  - "clean":  Nur Icon + Texte, keine Kästen/Hintergründe (transparent)
   skillBarStyle: "framed" | "clean";
 
-  // Ausrichtung relativ zum Anker (skillBarX). Bestimmt, in welche Richtung
+  // Orientierung: bestimmt, ob Slots horizontal nebeneinander oder vertikal
+  // untereinander gestackt werden. Beeinflusst auch die Bedeutung von
+  // `skillBarAlign` (horizontal: links/mitte/rechts, vertikal: oben/mitte/unten).
+  skillBarOrientation: "horizontal" | "vertical";
+
+  // Ausrichtung relativ zum Anker (skillBarX/Y). Bestimmt, in welche Richtung
   // sich die Leiste ausbreitet, wenn Skills hinzu-/wegkommen:
-  //  - "left":   Anker = linker Rand (Bar wächst nach rechts) — Default
-  //  - "center": Anker = Mitte (Bar wächst symmetrisch nach links + rechts)
-  //  - "right":  Anker = rechter Rand (Bar wächst nach links)
+  //  - horizontal: "left"|"center"|"right"  → Anker links / mittig / rechts
+  //  - vertikal:   "left"|"center"|"right"  → Anker oben / mittig / unten
+  // (Wert wird zwischen den Achsen geteilt, damit kein zweites Feld nötig ist.)
   skillBarAlign: "left" | "center" | "right";
 
   // Glücksrad (Overlay-Element). Wird nur sichtbar, wenn gerade gedreht wird,

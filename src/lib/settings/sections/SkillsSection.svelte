@@ -1,12 +1,14 @@
 <script lang="ts">
   import type {
     AppSettings,
+    AppMode,
     Skill,
     SkillRule,
     SkillEffect,
     SkillEffectKind,
     WheelSegment,
   } from "../../types";
+  import { HP_EFFECT_KINDS } from "../../stores";
   import {
     Button,
     Callout,
@@ -22,6 +24,18 @@
   } from "../../ui";
 
   export let cfg: AppSettings;
+
+  // Welche Skill-Liste der User gerade editiert. Startet im aktiven Modus,
+  // kann aber unabhängig vom App-Modus umgeschaltet werden (so kann der
+  // User auch die andere Liste pflegen, während die App in einem Modus
+  // läuft). Wirkt nur auf diese Section — keine Persistenz nötig.
+  let editingMode: AppMode = cfg.mode;
+
+  // Reaktiver Zugriff auf die aktuell editierte Liste. Lesen + Schreiben
+  // gehen über diesen Getter/Setter, damit die Reaktivität sauber bleibt.
+  $: skillList = editingMode === "simple" ? cfg.skillsSimple : cfg.skills;
+  // HP-Effekte sind nur im MMO-Modus sinnvoll (Simple hat keine HP-Leiste).
+  $: hpEffectsAllowed = editingMode === "mmo";
 
   // Effect-Kinds, die im Skill-Editor auswählbar sind. Die `inWheel`-Flag
   // steuert, ob ein Kind auch innerhalb eines Wheel-Sektors angeboten wird —
@@ -128,12 +142,27 @@
 
   let expanded: Record<number, boolean> = {};
 
+  // Schreibt die mutierte Liste zurück in die richtige Cfg-Property. Über
+  // die Assign-Idiom-Variante (cfg.skills = cfg.skills) triggern wir Svelte's
+  // Reaktivität ohne Inhaltsänderung.
   function bumpSkills() {
-    cfg.skills = cfg.skills;
+    if (editingMode === "simple") cfg.skillsSimple = cfg.skillsSimple;
+    else cfg.skills = cfg.skills;
+  }
+
+  function setSkillList(next: Skill[]) {
+    if (editingMode === "simple") cfg.skillsSimple = next;
+    else cfg.skills = next;
   }
 
   function nextSkillId(): number {
-    const used = new Set(cfg.skills.map((s) => s.id));
+    // IDs werden modus-übergreifend eindeutig gehalten, damit der Webhook
+    // /skill?id=N nie ein versehentliches Cross-Trigger erlaubt, wenn der
+    // User den Modus wechselt.
+    const used = new Set<number>([
+      ...cfg.skills.map((s) => s.id),
+      ...cfg.skillsSimple.map((s) => s.id),
+    ]);
     let id = 1;
     while (used.has(id)) id++;
     return id;
@@ -168,36 +197,36 @@
 
   function addSkill() {
     const s = newSkill();
-    cfg.skills = [...cfg.skills, s];
+    setSkillList([...skillList, s]);
     expanded = { ...expanded, [s.id]: true };
   }
 
   function removeSkill(idx: number) {
-    const s = cfg.skills[idx];
+    const s = skillList[idx];
     if (!confirm(`Skill "${s.name}" wirklich löschen?`)) return;
-    cfg.skills = cfg.skills.filter((_, i) => i !== idx);
+    setSkillList(skillList.filter((_, i) => i !== idx));
   }
 
   function moveSkill(idx: number, dir: -1 | 1) {
     const j = idx + dir;
-    if (j < 0 || j >= cfg.skills.length) return;
-    const arr = [...cfg.skills];
+    if (j < 0 || j >= skillList.length) return;
+    const arr = [...skillList];
     [arr[idx], arr[j]] = [arr[j], arr[idx]];
-    cfg.skills = arr;
+    setSkillList(arr);
   }
 
   function addRule(skillIdx: number) {
-    cfg.skills[skillIdx].rules.push(newRule());
+    skillList[skillIdx].rules.push(newRule());
     bumpSkills();
   }
 
   function removeRule(skillIdx: number, ruleIdx: number) {
-    cfg.skills[skillIdx].rules.splice(ruleIdx, 1);
+    skillList[skillIdx].rules.splice(ruleIdx, 1);
     bumpSkills();
   }
 
   function moveRule(skillIdx: number, ruleIdx: number, dir: -1 | 1) {
-    const rules = cfg.skills[skillIdx].rules;
+    const rules = skillList[skillIdx].rules;
     const j = ruleIdx + dir;
     if (j < 0 || j >= rules.length) return;
     [rules[ruleIdx], rules[j]] = [rules[j], rules[ruleIdx]];
@@ -205,7 +234,7 @@
   }
 
   function addCondition(skillIdx: number, ruleIdx: number) {
-    cfg.skills[skillIdx].rules[ruleIdx].conditions.push({
+    skillList[skillIdx].rules[ruleIdx].conditions.push({
       minKmh: null,
       maxKmh: null,
       minHpPct: null,
@@ -217,17 +246,20 @@
   }
 
   function removeCondition(skillIdx: number, ruleIdx: number, condIdx: number) {
-    cfg.skills[skillIdx].rules[ruleIdx].conditions.splice(condIdx, 1);
+    skillList[skillIdx].rules[ruleIdx].conditions.splice(condIdx, 1);
     bumpSkills();
   }
 
   function addEffect(skillIdx: number, ruleIdx: number) {
-    cfg.skills[skillIdx].rules[ruleIdx].effects.push(defaultEffectFor("heal"));
+    // Im Simple-Modus gibt es keine HP — wir starten mit "levelUp" statt
+    // "heal", damit ein neu hinzugefügter Effekt sofort etwas tut.
+    const startKind: SkillEffectKind = hpEffectsAllowed ? "heal" : "levelUp";
+    skillList[skillIdx].rules[ruleIdx].effects.push(defaultEffectFor(startKind));
     bumpSkills();
   }
 
   function removeEffect(skillIdx: number, ruleIdx: number, effIdx: number) {
-    cfg.skills[skillIdx].rules[ruleIdx].effects.splice(effIdx, 1);
+    skillList[skillIdx].rules[ruleIdx].effects.splice(effIdx, 1);
     bumpSkills();
   }
 
@@ -363,12 +395,30 @@
     return v === "" ? null : Number(v);
   }
 
+  // Duplikate werden über beide Listen geprüft — Webhook-IDs sind global.
   $: idCounts = (() => {
     const c: Record<number, number> = {};
     for (const s of cfg.skills) c[s.id] = (c[s.id] || 0) + 1;
+    for (const s of cfg.skillsSimple) c[s.id] = (c[s.id] || 0) + 1;
     return c;
   })();
   $: hasDuplicateIds = Object.values(idCounts).some((c) => c > 1);
+
+  // Effect-Kind-Optionen, gefiltert nach Modus (Simple → ohne HP-Effekte).
+  $: visibleEffectKindOptions = effectKindOptions.filter(
+    (o) => hpEffectsAllowed || !HP_EFFECT_KINDS.includes(o.value),
+  );
+  // Wheel-Sektoren erlauben nur eine Untermenge (kein verschachteltes Rad);
+  // im Simple-Modus zusätzlich keine HP-Effekte.
+  $: visibleWheelEffectKindOptions = effectKindOptions.filter(
+    (o) => o.inWheel && (hpEffectsAllowed || !HP_EFFECT_KINDS.includes(o.value)),
+  );
+  // Multiplier-Targets im Simple-Modus auf das beschränken, was es noch gibt
+  // (alle aktuellen Targets sind HP-bezogen → leer im Simple-Modus). Der
+  // Multiplier-Effekt selbst bleibt für künftige Level-bezogene Targets nutzbar.
+  $: visibleMultipliableKinds = MULTIPLIABLE_KINDS.filter(
+    (mk) => hpEffectsAllowed || !HP_EFFECT_KINDS.includes(mk.value),
+  );
 
   // Copy-Helper: Komplette Webhook-URL für einen Skill in den Zwischenspeicher
   // legen. Nutzt localhost + den aktuell konfigurierten Port (cfg.webhookPort).
@@ -397,17 +447,39 @@
   description="Baukasten für Webhook-Effekte mit Bedingungen, Effekten und optionaler Wahrscheinlichkeit. Jeder Skill hat eine eindeutige ID und wird über GET /skill?id=N getriggert. Mehrere Regeln pro Skill werden in Reihenfolge geprüft — die erste, deren Bedingungen erfüllt sind, feuert."
 />
 
-{#if cfg.mode !== "mmo"}
-  <Callout variant="warn">
-    Skills sind nur im <strong>MMO-Modus</strong> aktiv. Im aktuellen Modus
-    werden sie ignoriert.
-  </Callout>
-{/if}
+<Card>
+  <Field
+    label="Modus"
+    hint={editingMode === "simple"
+      ? "Skills für den Simple-Modus. Keine HP-Effekte verfügbar — nur Level-/Multiplikator-/Glücksrad-Effekte."
+      : "Skills für den MMO-Modus. Alle Effekte verfügbar, inkl. HP-Bezug."}
+  >
+    <div class="align-row">
+      <label class="align-chip" class:active={editingMode === "mmo"}>
+        <input type="radio" bind:group={editingMode} value="mmo" />
+        <span>MMO</span>
+        <span class="mode-count">{cfg.skills.length}</span>
+      </label>
+      <label class="align-chip" class:active={editingMode === "simple"}>
+        <input type="radio" bind:group={editingMode} value="simple" />
+        <span>Simple</span>
+        <span class="mode-count">{cfg.skillsSimple.length}</span>
+      </label>
+    </div>
+  </Field>
+  {#if editingMode !== cfg.mode}
+    <Callout variant="info">
+      Du editierst die <strong>{editingMode === "simple" ? "Simple" : "MMO"}</strong>-Skills,
+      die App läuft aber gerade im <strong>{cfg.mode === "simple" ? "Simple" : "MMO"}</strong>-Modus.
+      Aktive Triggers nutzen die Liste des aktuellen App-Modus.
+    </Callout>
+  {/if}
+</Card>
 
 {#if hasDuplicateIds}
   <Callout variant="warn">
-    Mehrere Skills teilen sich eine ID. Webhook-Calls treffen dann immer den
-    ersten in der Liste — Duplikate vergeben oder löschen.
+    Mehrere Skills teilen sich eine ID (modus-übergreifend geprüft). Webhook-Calls
+    treffen dann immer den ersten in der aktiven Liste — Duplikate vergeben oder löschen.
   </Callout>
 {/if}
 
@@ -415,14 +487,14 @@
   <div class="add-row">
     <Button variant="primary" size="md" on:click={addSkill}>+ Neuer Skill</Button>
     <span class="hint-text">
-      {cfg.skills.length === 0
+      {skillList.length === 0
         ? "Noch keine Skills angelegt."
-        : `${cfg.skills.length} Skill${cfg.skills.length === 1 ? "" : "s"}`}
+        : `${skillList.length} Skill${skillList.length === 1 ? "" : "s"}`}
     </span>
   </div>
 </Card>
 
-{#each cfg.skills as skill, sIdx (skill.id + "-" + sIdx)}
+{#each skillList as skill, sIdx (skill.id + "-" + sIdx)}
   {@const dup = idCounts[skill.id] > 1}
   <Card>
     <div class="skill-head">
@@ -452,7 +524,7 @@
         <button
           class="mini-btn"
           on:click={() => moveSkill(sIdx, 1)}
-          disabled={sIdx === cfg.skills.length - 1}
+          disabled={sIdx === skillList.length - 1}
           title="Nach unten"
         >▼</button>
         <button
@@ -718,7 +790,7 @@
                     value={eff.kind}
                     on:change={(e) => changeEffectKind(rule.effects, eIdx, e.currentTarget)}
                   >
-                    {#each effectKindOptions as opt}
+                    {#each visibleEffectKindOptions as opt}
                       <option value={opt.value}>{opt.label}</option>
                     {/each}
                   </select>
@@ -882,7 +954,7 @@
                   <div class="param-row col">
                     <span class="param-label">Wirkt auf</span>
                     <div class="multi-kinds">
-                      {#each MULTIPLIABLE_KINDS as mk}
+                      {#each visibleMultipliableKinds as mk}
                         <label class="kind-chip">
                           <input
                             type="checkbox"
@@ -998,7 +1070,7 @@
                               value={segEff.kind}
                               on:change={(e) => changeEffectKind(seg.effects, sefIdx, e.currentTarget)}
                             >
-                              {#each effectKindOptions.filter((o) => o.inWheel) as opt}
+                              {#each visibleWheelEffectKindOptions as opt}
                                 <option value={opt.value}>{opt.label}</option>
                               {/each}
                             </select>
@@ -1099,7 +1171,7 @@
                             <div class="param-row col inner-extra">
                               <span class="param-label">Wirkt auf</span>
                               <div class="multi-kinds">
-                                {#each MULTIPLIABLE_KINDS as mk}
+                                {#each visibleMultipliableKinds as mk}
                                   <label class="kind-chip">
                                     <input
                                       type="checkbox"
@@ -1234,21 +1306,39 @@
   </Field>
 
   <Field
+    label="Orientierung"
+    hint={'Horizontal: Slots nebeneinander. Vertikal: Slots untereinander.'}
+  >
+    <div class="align-row">
+      <label class="align-chip" class:active={cfg.skillBarOrientation === "horizontal"}>
+        <input type="radio" bind:group={cfg.skillBarOrientation} value="horizontal" />
+        <span>↔ Horizontal</span>
+      </label>
+      <label class="align-chip" class:active={cfg.skillBarOrientation === "vertical"}>
+        <input type="radio" bind:group={cfg.skillBarOrientation} value="vertical" />
+        <span>↕ Vertikal</span>
+      </label>
+    </div>
+  </Field>
+
+  <Field
     label="Ausrichtung"
-    hint={'Bestimmt, in welche Richtung die Leiste wächst, wenn Skills hinzu-/wegkommen. „Mittig" hält den Anker zentriert — ideal für zentrierte Platzierung.'}
+    hint={cfg.skillBarOrientation === "vertical"
+      ? 'Bestimmt, in welche Richtung die Leiste wächst, wenn Skills hinzu-/wegkommen. „Mittig" hält den Anker zentriert.'
+      : 'Bestimmt, in welche Richtung die Leiste wächst, wenn Skills hinzu-/wegkommen. „Mittig" hält den Anker zentriert — ideal für zentrierte Platzierung.'}
   >
     <div class="align-row">
       <label class="align-chip" class:active={cfg.skillBarAlign === "left"}>
         <input type="radio" bind:group={cfg.skillBarAlign} value="left" />
-        <span>← Links</span>
+        <span>{cfg.skillBarOrientation === "vertical" ? "↑ Oben" : "← Links"}</span>
       </label>
       <label class="align-chip" class:active={cfg.skillBarAlign === "center"}>
         <input type="radio" bind:group={cfg.skillBarAlign} value="center" />
-        <span>↔ Mittig</span>
+        <span>{cfg.skillBarOrientation === "vertical" ? "↕ Mittig" : "↔ Mittig"}</span>
       </label>
       <label class="align-chip" class:active={cfg.skillBarAlign === "right"}>
         <input type="radio" bind:group={cfg.skillBarAlign} value="right" />
-        <span>Rechts →</span>
+        <span>{cfg.skillBarOrientation === "vertical" ? "Unten ↓" : "Rechts →"}</span>
       </label>
     </div>
   </Field>
@@ -1273,6 +1363,19 @@
   .hint-text {
     font-size: var(--fs-xs);
     color: var(--c-text-muted);
+  }
+  .mode-count {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    background: var(--c-bg-3);
+    color: var(--c-text-muted);
+    border-radius: var(--r-sm);
+    padding: 1px 6px;
+    margin-left: 4px;
+  }
+  .align-chip.active .mode-count {
+    background: var(--c-bg-1);
+    color: var(--c-accent);
   }
 
   .skill-head {

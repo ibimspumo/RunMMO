@@ -294,6 +294,8 @@
     if (lastFreezeSourceId === null) return 0;
     const rt = $skillRuntime[lastFreezeSourceId];
     if (!rt) return 0;
+    // HpBar rendert nur im MMO-Modus, daher cfg.skills hier definitiv die
+    // richtige Liste (Freeze-Effekte sind im Simple-Modus deaktiviert).
     const sk = $settings.skills.find((s) => s.id === lastFreezeSourceId);
     if (!sk || sk.cooldownSec <= 0) return 0;
     const total = sk.cooldownSec * 1000;

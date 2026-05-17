@@ -84,6 +84,7 @@ fn build_router(state: AxumState) -> Router {
         .route("/heal", on(any, handle_heal))
         .route("/damage", on(any, handle_damage))
         .route("/skill", on(any, handle_skill))
+        .route("/dom", on(any, handle_dom))
         .route("/status", on(any, handle_status))
         .route("/", get(handle_root))
         .with_state(state)
@@ -225,6 +226,11 @@ async fn handle_skill(
     json_ok(&format!("Skill #{} ausgelöst", id))
 }
 
+async fn handle_dom(State(s): State<AxumState>) -> impl IntoResponse {
+    let _ = s.app.emit("webhook", json!({ "kind": "fake" }));
+    json_ok("Fake-Modus getoggelt")
+}
+
 async fn handle_status(State(s): State<AxumState>) -> impl IntoResponse {
     // Frontend nach aktuellem Status fragen; mit Timeout auf Antwort warten
     let reply_id = Uuid::new_v4().to_string();
@@ -261,7 +267,7 @@ async fn handle_root() -> impl IntoResponse {
         "endpoints": [
             "/up", "/down", "/reset", "/gift?level=X",
             "/heal?amount=X", "/damage?amount=X",
-            "/skill?id=N", "/status"
+            "/skill?id=N", "/dom", "/status"
         ]
     }))
 }

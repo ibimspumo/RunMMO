@@ -15,6 +15,7 @@
     skillRuntime,
     findMatchingRule,
     extraLives,
+    activeSkillsFor,
   } from "../stores";
 
   export let cfg: AppSettings;
@@ -55,15 +56,20 @@
   $: leftPx = Math.round(cfg.skillBarX * autoScale);
   $: topPx = Math.round(cfg.skillBarY * autoScale);
 
-  // Ausrichtung: bestimmt, wo der Anker (leftPx) auf der Leiste liegt. Bei
-  // "center"/"right" schiebt sich die Leiste so, dass sie symmetrisch bzw.
-  // nach links wächst, statt nur nach rechts.
-  $: alignTranslateX =
+  // Ausrichtung: bestimmt, wo der Anker (leftPx/topPx) auf der Leiste liegt.
+  // Bei "center"/"right" schiebt sich die Leiste so, dass sie symmetrisch bzw.
+  // in Gegenrichtung wächst. Die Achse hängt von der Orientierung ab.
+  $: alignPct =
     cfg.skillBarAlign === "center"
       ? "-50%"
       : cfg.skillBarAlign === "right"
         ? "-100%"
         : "0";
+  $: isVertical = cfg.skillBarOrientation === "vertical";
+  $: alignTransform = isVertical
+    ? `translateY(${alignPct})`
+    : `translateX(${alignPct})`;
+  $: flexDir = isVertical ? "column" : "row";
 
   type SlotInfo = {
     skill: Skill;
@@ -106,7 +112,8 @@
 
   $: runtime = $skillRuntime;
   $: livesCount = $extraLives;
-  $: slots = cfg.skills
+  $: activeSkills = activeSkillsFor(cfg);
+  $: slots = activeSkills
     .map((s) => computeSlotInfo(s, state, cfg, runtime, livesCount, cooldownTick))
     .filter((info) => cfg.skillBarShowInactive || info.matchedRule !== null);
 
@@ -190,7 +197,8 @@
     left: {leftPx}px;
     top: {topPx}px;
     gap: {gapPx}px;
-    transform: translateX({alignTranslateX});
+    flex-direction: {flexDir};
+    transform: {alignTransform};
   "
 >
   {#each slots as info (info.skill.id)}
