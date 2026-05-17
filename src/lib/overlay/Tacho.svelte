@@ -136,16 +136,17 @@
   // "Nach oben" entspricht 90° in math → wir wollen rotation = 90 - needleAngle.
   $: needleRotation = 90 - needleAngle;
 
-  $: textShadow = cfg.textShadowEnabled
-    ? `${cfg.textShadowOffsetX}px ${cfg.textShadowOffsetY}px ${cfg.textShadowBlur}px ${rgbaToCss(cfg.textShadowColor)}`
+  $: textShadow = cfg.tachoTextShadowEnabled
+    ? `${cfg.tachoTextShadowOffsetX}px ${cfg.tachoTextShadowOffsetY}px ${cfg.tachoTextShadowBlur}px ${rgbaToCss(cfg.tachoTextShadowColor)}`
     : "none";
-  $: outlineStyle = cfg.textOutlineEnabled
-    ? buildOutline(cfg.textOutlineSize, rgbaToCss(cfg.textOutlineColor))
+  $: outlineStyle = cfg.tachoTextOutlineEnabled
+    ? buildOutline(cfg.tachoTextOutlineSize, rgbaToCss(cfg.tachoTextOutlineColor))
     : "none";
   $: combinedShadow = (() => {
     const parts = [textShadow, outlineStyle].filter((x) => x && x !== "none");
     return parts.length === 0 ? "none" : parts.join(", ");
   })();
+  $: centerFontSize = cfg.tachoTextSize > 0 ? cfg.tachoTextSize : cfg.levelTextSize * 1.6;
   function buildOutline(size: number, color: string): string {
     if (size <= 0) return "none";
     const out: string[] = [];
@@ -276,12 +277,17 @@
       <div
         class="center-value"
         style="
-          color: {rgbaToCss(cfg.textColor)};
-          font-size: {cfg.levelTextSize * 1.6}px;
+          color: {rgbaToCss(cfg.tachoTextColor)};
+          font-size: {centerFontSize}px;
           text-shadow: {combinedShadow};
         "
       >
-        {currentLevel1Based}<span class="unit">KMH</span>
+        <span
+          class="center-value-inner"
+          data-design-target={designMode ? "tacho.text" : null}
+        >
+          {currentLevel1Based}<span class="unit">KMH</span>
+        </span>
       </div>
     {/if}
   </div>
@@ -316,6 +322,12 @@
     line-height: 1;
     pointer-events: none;
     user-select: none;
+  }
+  /* Inner span = exakte Text-Bbox als Design-Hit-Target,
+     ohne dass das Container-Div Klicks auf den Tacho blockiert. */
+  .center-value-inner {
+    display: inline-block;
+    pointer-events: auto;
   }
   .center-value .unit {
     font-size: 0.45em;

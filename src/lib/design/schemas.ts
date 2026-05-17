@@ -314,6 +314,30 @@ export const SCHEMAS: Record<string, DesignSchema> = {
     ],
   },
 
+  // ===== Tacho — Mittiger Text =====
+  "tacho.text": {
+    id: "tacho.text",
+    label: "Tacho · KMH-Text",
+    fields: [
+      ...textBaseFields(
+        { size: "tachoTextSize", color: "tachoTextColor" },
+        { sizeHint: "0 = automatisch aus Level-Textgröße" },
+      ),
+      ...shadowFields({
+        enabled: "tachoTextShadowEnabled",
+        color: "tachoTextShadowColor",
+        offsetX: "tachoTextShadowOffsetX",
+        offsetY: "tachoTextShadowOffsetY",
+        blur: "tachoTextShadowBlur",
+      }),
+      ...outlineFields({
+        enabled: "tachoTextOutlineEnabled",
+        color: "tachoTextOutlineColor",
+        size: "tachoTextOutlineSize",
+      }),
+    ],
+  },
+
   // ===== Skill-Leiste — Slot =====
   "skill.slot": {
     id: "skill.slot",

@@ -142,6 +142,17 @@ export interface AppSettings {
   tachoDialBgColor: RGBA;        // Hintergrund des Gauge-Kreises
   tachoInactiveSegmentOpacity: number; // 0..1, Deckkraft der inaktiven Segmente
   tachoInactiveLabelOpacity: number;   // 0..1, Deckkraft der inaktiven Labels + Ticks
+  // Mittiger KMH-Text: eigenständig stylebar im Design-Modus.
+  tachoTextColor: RGBA;
+  tachoTextSize: number;               // 0 = auto (aus levelTextSize)
+  tachoTextShadowEnabled: boolean;
+  tachoTextShadowColor: RGBA;
+  tachoTextShadowOffsetX: number;
+  tachoTextShadowOffsetY: number;
+  tachoTextShadowBlur: number;
+  tachoTextOutlineEnabled: boolean;
+  tachoTextOutlineColor: RGBA;
+  tachoTextOutlineSize: number;
 
   // Stream-HP (nur im MMO-Modus aktiv)
   streamHpEnabled: boolean;
